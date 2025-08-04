@@ -1,6 +1,6 @@
 {
   "driver_id": "weather_display",
-  "version": "1.1.15",
+  "version": "1.1.16",
   "min_core_api": "0.18.0",
   "name": {
     "en": "Weather Display",
@@ -40,19 +40,15 @@
         }
       },
       {
-        "id": "temperature_unit",
+        "id": "use_celsius",
         "label": {
-          "en": "Temperature Unit",
-          "de": "Temperatureinheit",
-          "fr": "Unité de température"
+          "en": "Use Celsius (°C) instead of Fahrenheit (°F)",
+          "de": "Celsius (°C) statt Fahrenheit (°F) verwenden",
+          "fr": "Utiliser Celsius (°C) au lieu de Fahrenheit (°F)"
         },
         "field": {
-          "select": {
-            "value": "fahrenheit",
-            "options": [
-              {"value": "fahrenheit", "label": {"en": "Fahrenheit (°F)"}},
-              {"value": "celsius", "label": {"en": "Celsius (°C)"}}
-            ]
+          "checkbox": {
+            "value": false
           }
         }
       }

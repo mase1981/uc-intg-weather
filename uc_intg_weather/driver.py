@@ -1,4 +1,3 @@
-# uc_intg_weather/driver.py
 """
 Weather integration driver for Unfolded Circle Remote.
 Displays current weather conditions using Open-Meteo API.
@@ -219,7 +218,8 @@ async def handle_setup(request: ucapi.SetupDriver) -> ucapi.SetupAction:
     if isinstance(request, ucapi.DriverSetupRequest):
         if request.setup_data and "location" in request.setup_data:
             location = request.setup_data.get("location", "").strip()
-            temperature_unit = request.setup_data.get("temperature_unit", "fahrenheit")
+            use_celsius = request.setup_data.get("use_celsius", False)
+            temperature_unit = "celsius" if use_celsius else "fahrenheit"
             if location:
                 _LOG.info(f"Processing location from setup_data: {location}, unit: {temperature_unit}")
                 try:
@@ -270,7 +270,8 @@ async def handle_setup(request: ucapi.SetupDriver) -> ucapi.SetupAction:
 
     if isinstance(request, ucapi.UserDataResponse):
         location = request.input_values.get("location", "").strip()
-        temperature_unit = request.input_values.get("temperature_unit", "fahrenheit")
+        use_celsius = request.input_values.get("use_celsius", False)
+        temperature_unit = "celsius" if use_celsius else "fahrenheit"
         if not location:
             return ucapi.SetupError(IntegrationSetupError.OTHER)
 
