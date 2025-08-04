@@ -1,6 +1,6 @@
 {
   "driver_id": "weather_display",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "min_core_api": "0.18.0",
   "name": {
     "en": "Weather Display",

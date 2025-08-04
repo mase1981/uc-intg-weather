@@ -8,7 +8,8 @@ import base64
 from typing import Any, Dict, Optional
 import asyncio
 
-from ucapi.media_player import MediaPlayer, Features, States, Attributes, Commands
+# Import the media_player module directly to access its enums
+from ucapi import media_player
 from ucapi.api_definitions import StatusCodes
 
 _LOG = logging.getLogger(__name__)
@@ -18,7 +19,7 @@ async def weather_command_handler(entity, command: str, params: dict[str, Any] |
     """Handle weather entity commands."""
     _LOG.info(f"Weather command received: {command} with params: {params}")
 
-    if command == Commands.ON:
+    if command == media_player.Commands.ON:
         # Treat the ON command as a "Refresh" action
         _LOG.info("Refreshing weather data on user command.")
         if hasattr(entity, 'update_weather'):
@@ -30,42 +31,35 @@ async def weather_command_handler(entity, command: str, params: dict[str, Any] |
         return StatusCodes.NOT_IMPLEMENTED
 
 
-class WeatherEntity(MediaPlayer):
+class WeatherEntity(media_player.MediaPlayer):
     """Weather display entity as a media player."""
 
     def __init__(self, entity_id: str, name: str, weather_client, location_name: str, api=None):
+        # Mimic the working HDFury example with a minimal feature set
+        # for interactive capabilities.
         features = [
-            Features.ON_OFF,
-            Features.MEDIA_TITLE,
-            Features.MEDIA_ARTIST,
-            Features.MEDIA_ALBUM,
-            Features.MEDIA_IMAGE_URL,
+            media_player.Features.ON_OFF,
         ]
 
-        # Define the attributes the constructor officially supports
+        # Define the initial attributes for display.
         initial_attributes = {
-            Attributes.STATE: States.ON,
-            Attributes.MEDIA_TITLE: location_name,
-            Attributes.MEDIA_ARTIST: "Loading...",
-            Attributes.MEDIA_ALBUM: "Fetching weather...",
-            Attributes.MEDIA_IMAGE_URL: "",
+            media_player.Attributes.STATE: media_player.States.ON,
+            media_player.Attributes.MEDIA_TITLE: location_name,
+            media_player.Attributes.MEDIA_ARTIST: "Loading...",
+            media_player.Attributes.MEDIA_ALBUM: "Fetching weather...",
+            media_player.Attributes.MEDIA_IMAGE_URL: "",
         }
 
-        # Call the parent constructor with only the officially recognized attributes
+        # Call the parent constructor
         super().__init__(
             identifier=entity_id,
             name=name,
             features=features,
             attributes=initial_attributes,
-            cmd_handler=weather_command_handler
+            cmd_handler=weather_command_handler,
+            # THE KEY CHANGE: Set the device class to get a simpler UI layout
+            device_class=media_player.DeviceClasses.RECEIVER
         )
-        
-        # *** THE FIX: ***
-        # Now, add the custom controls attribute directly. We use the raw string 'media_player_controls'
-        # because it's not in the official 'Attributes' enum in the ucapi library.
-        self.attributes["media_player_controls"] = [
-            ["power"]
-        ]
 
         self.weather_client = weather_client
         self.location_name = location_name
@@ -114,23 +108,23 @@ class WeatherEntity(MediaPlayer):
 
             if weather_data:
                 new_attributes.update({
-                    Attributes.MEDIA_ARTIST: weather_data["temperature"],
-                    Attributes.MEDIA_ALBUM: weather_data["description"],
-                    Attributes.MEDIA_IMAGE_URL: self._get_icon_base64(weather_data["icon"])
+                    media_player.Attributes.MEDIA_ARTIST: weather_data["temperature"],
+                    media_player.Attributes.MEDIA_ALBUM: weather_data["description"],
+                    media_player.Attributes.MEDIA_IMAGE_URL: self._get_icon_base64(weather_data["icon"])
                 })
                 _LOG.info(f"Weather updated: {weather_data['temperature']} - {weather_data['description']}")
             else:
                 _LOG.warning("Failed to fetch weather data")
                 new_attributes.update({
-                    Attributes.MEDIA_ARTIST: "N/A",
-                    Attributes.MEDIA_ALBUM: "Data unavailable",
+                    media_player.Attributes.MEDIA_ARTIST: "N/A",
+                    media_player.Attributes.MEDIA_ALBUM: "Data unavailable",
                 })
 
         except Exception as e:
             _LOG.error(f"Error updating weather: {e}")
             new_attributes.update({
-                Attributes.MEDIA_ARTIST: "Error",
-                Attributes.MEDIA_ALBUM: "Update failed",
+                media_player.Attributes.MEDIA_ARTIST: "Error",
+                media_player.Attributes.MEDIA_ALBUM: "Update failed",
             })
 
         # Update local attributes
