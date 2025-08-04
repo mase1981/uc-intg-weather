@@ -1,5 +1,3 @@
-# uc_intg_weather/client.py
-
 """Weather API client using Open-Meteo."""
 
 import logging
@@ -16,7 +14,6 @@ _LOG = logging.getLogger(__name__)
 class WeatherClient:
     """Client for fetching weather data from Open-Meteo API."""
 
-    # Weather code to icon mapping and descriptions... (omitted for brevity, no changes here)
     WEATHER_ICONS_DAY = {0:"sun.png",1:"sun-cloud.png",2:"sun-cloud.png",3:"cloud.png",45:"fog.png",48:"fog.png",51:"drizzle.png",53:"drizzle.png",55:"drizzle.png",56:"drizzle.png",57:"drizzle.png",61:"rain.png",63:"rain.png",65:"rain-heavy.png",66:"rain.png",67:"rain-heavy.png",71:"snow.png",73:"snow.png",75:"snow-heavy.png",77:"snow.png",80:"rain.png",81:"rain.png",82:"rain-heavy.png",85:"snow.png",86:"snow-heavy.png",95:"thunderstorm.png",96:"thunderstorm.png",99:"thunderstorm.png"}
     WEATHER_ICONS_NIGHT = {0:"moon.png",1:"moon-cloud.png",2:"moon-cloud.png",3:"cloud.png",45:"fog.png",48:"fog.png",51:"drizzle.png",53:"drizzle.png",55:"drizzle.png",56:"drizzle.png",57:"drizzle.png",61:"rain.png",63:"rain.png",65:"rain-heavy.png",66:"rain.png",67:"rain-heavy.png",71:"snow.png",73:"snow.png",75:"snow-heavy.png",77:"snow.png",80:"rain.png",81:"rain.png",82:"rain-heavy.png",85:"snow.png",86:"snow-heavy.png",95:"thunderstorm.png",96:"thunderstorm.png",99:"thunderstorm.png"}
     WEATHER_DESCRIPTIONS = {0:"Clear sky",1:"Mainly clear",2:"Partly cloudy",3:"Overcast",45:"Fog",48:"Depositing rime fog",51:"Light drizzle",53:"Moderate drizzle",55:"Dense drizzle",56:"Light freezing drizzle",57:"Dense freezing drizzle",61:"Slight rain",63:"Moderate rain",65:"Heavy rain",66:"Light freezing rain",67:"Heavy freezing rain",71:"Slight snow",73:"Moderate snow",75:"Heavy snow",77:"Snow grains",80:"Light rain showers",81:"Moderate rain showers",82:"Heavy rain showers",85:"Light snow showers",86:"Heavy snow showers",95:"Thunderstorm",96:"Thunderstorm with hail",99:"Thunderstorm with heavy hail"}
@@ -25,7 +22,6 @@ class WeatherClient:
     def __init__(self, latitude: float, longitude: float):
         self.latitude = latitude
         self.longitude = longitude
-        # Create a single SSL context to be reused
         self.ssl_context = ssl.create_default_context(cafile=certifi.where())
         self.session: aiohttp.ClientSession | None = None
 
@@ -109,7 +105,6 @@ class WeatherClient:
             url = "https://geocoding-api.open-meteo.com/v1/search"
             params = {"name": search_query, "count": 5, "language": "en", "format": "json"}
             
-            # Explicitly create SSL context using certifi's CA bundle
             ssl_context = ssl.create_default_context(cafile=certifi.where())
             connector = aiohttp.TCPConnector(ssl=ssl_context)
             timeout = aiohttp.ClientTimeout(total=30)

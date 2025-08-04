@@ -7,7 +7,7 @@ Displays current weather conditions using Open-Meteo API.
 import asyncio
 import logging
 import os
-import sys  # <-- Correctly imported sys
+import sys
 from pathlib import Path
 from typing import Any, Dict
 from datetime import datetime
@@ -47,7 +47,6 @@ def get_smart_update_interval():
     else:
         return 3600  # 1 hour
 
-# Global Objects - Following Xbox Live pattern
 try:
     loop = asyncio.get_running_loop()
 except RuntimeError:
@@ -77,13 +76,11 @@ async def setup_weather_services():
             f"Weather - {location_name}",
             WEATHER_CLIENT,
             location_name,
-            API  # Pass API reference for attribute updates
+            API
         )
 
-        # Add entity to available entities
         API.available_entities.add(WEATHER_ENTITY)
 
-        # Required delay for Remote to process entity registration
         await asyncio.sleep(0.5)
 
         _LOG.info(f"Weather services set up for {location_name}")
@@ -118,7 +115,7 @@ async def weather_update_loop():
             # Determine next update interval
             if first_run:
                 first_run = False
-                await asyncio.sleep(5)  # Quick first update
+                await asyncio.sleep(5)
             else:
                 interval = get_smart_update_interval()
                 _LOG.info(f"Next weather update in {interval/60} minutes")
@@ -166,11 +163,9 @@ async def on_connect() -> None:
     if WEATHER_CLIENT and WEATHER_ENTITY:
         await API.set_device_state(DeviceStates.CONNECTED)
         _LOG.info("✅ Device state confirmed as CONNECTED after remote connection")
-        # Trigger immediate weather update on connection
         if WEATHER_ENTITY:
             await WEATHER_ENTITY.update_weather()
     else:
-        # Try to reconnect if services aren't set up
         _LOG.info("Services not ready, attempting to set up...")
         await connect_and_start_weather()
 
@@ -179,7 +174,6 @@ async def on_connect() -> None:
 async def on_disconnect() -> None:
     """Called when the remote disconnects."""
     _LOG.info("Remote disconnected")
-    # Don't stop the update task - keep it running for reconnection
 
 
 @API.listens_to(Events.ENTER_STANDBY)
@@ -195,7 +189,6 @@ async def on_enter_standby() -> None:
 async def on_exit_standby() -> None:
     """Called when remote exits standby."""
     _LOG.info("Remote exited standby - resuming updates")
-    # Update weather and restart update loop
     if WEATHER_ENTITY:
         await WEATHER_ENTITY.update_weather()
         start_weather_updates()
@@ -223,18 +216,14 @@ async def handle_setup(request: ucapi.SetupDriver) -> ucapi.SetupAction:
     _LOG.info(f"Handling setup request: {type(request).__name__}")
 
     if isinstance(request, ucapi.DriverSetupRequest):
-        # Check if we already have setup data in the request
         if request.setup_data and "location" in request.setup_data:
-            # User already entered location in the UI, process it directly
             location = request.setup_data.get("location", "").strip()
             if location:
                 _LOG.info(f"Processing location from setup_data: {location}")
                 try:
-                    # Geocode the location
                     latitude, longitude, location_name = await WeatherClient.geocode_location(location)
                     _LOG.info(f"Geocoded to: {location_name} ({latitude}, {longitude})")
 
-                    # Test the weather API
                     test_client = WeatherClient(latitude, longitude)
                     test_data = await test_client.get_current_weather()
                     await test_client.close()
@@ -261,7 +250,6 @@ async def handle_setup(request: ucapi.SetupDriver) -> ucapi.SetupAction:
                     _LOG.error(f"Setup failed: {e}")
                     return ucapi.SetupError(IntegrationSetupError.OTHER)
 
-        # No setup data, show the input form
         return ucapi.RequestUserInput(
             title={"en": "Weather Location Setup"},
             settings=[
@@ -279,7 +267,6 @@ async def handle_setup(request: ucapi.SetupDriver) -> ucapi.SetupAction:
         )
 
     if isinstance(request, ucapi.UserDataResponse):
-        # This should not happen with the new flow, but handle it for compatibility
         location = request.input_values.get("location", "").strip()
         if not location:
             return ucapi.SetupError(IntegrationSetupError.OTHER)
@@ -287,11 +274,9 @@ async def handle_setup(request: ucapi.SetupDriver) -> ucapi.SetupAction:
         try:
             _LOG.info(f"Processing location from UserDataResponse: {location}")
 
-            # Geocode the location
             latitude, longitude, location_name = await WeatherClient.geocode_location(location)
             _LOG.info(f"Geocoded to: {location_name} ({latitude}, {longitude})")
 
-            # Test the weather API
             test_client = WeatherClient(latitude, longitude)
             test_data = await test_client.get_current_weather()
             await test_client.close()
@@ -301,11 +286,9 @@ async def handle_setup(request: ucapi.SetupDriver) -> ucapi.SetupAction:
 
             _LOG.info(f"Weather test successful: {test_data['temperature']} - {test_data['description']}")
 
-            # Save configuration
             CONFIG.set_location(location, latitude, longitude, location_name)
             await CONFIG.save()
 
-            # Set up services immediately after successful setup
             loop.create_task(on_setup_complete())
 
             _LOG.info(f"Weather setup completed for {location_name}")
@@ -318,7 +301,6 @@ async def handle_setup(request: ucapi.SetupDriver) -> ucapi.SetupAction:
             _LOG.error(f"Setup failed: {e}")
             return ucapi.SetupError(IntegrationSetupError.OTHER)
 
-    # Handle abort
     if isinstance(request, ucapi.AbortDriverSetup):
         _LOG.info("Setup aborted by user")
         return ucapi.SetupError(IntegrationSetupError.USER_CANCELLED)
@@ -334,19 +316,15 @@ async def main():
     _LOG.info(f"Python path: {sys.path}")
     _LOG.info(f"Script location: {__file__}")
 
-    # Load configuration
     await CONFIG.load()
 
-    # Set up driver path
     driver_path = str(Path(__file__).resolve().parent.parent / "driver.json")
     _LOG.info(f"Driver path: {driver_path}")
 
-    # Initialize API with setup handler
     await API.init(driver_path, handle_setup)
 
     _LOG.info("Weather Driver is up and discoverable.")
 
-    # Check if we have a complete configuration
     if CONFIG.is_configured():
         _LOG.info("Complete configuration found, attempting auto-connection...")
         await connect_and_start_weather()

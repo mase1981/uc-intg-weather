@@ -1,5 +1,3 @@
-# uc_intg_weather/weather_entity.py
-
 """Weather media player entity."""
 
 import logging
@@ -20,13 +18,11 @@ async def weather_command_handler(entity, command: str, params: dict[str, Any] |
     _LOG.info(f"Weather command received: {command} with params: {params}")
 
     if command == media_player.Commands.ON:
-        # Treat the ON command as a "Refresh" action
         _LOG.info("Refreshing weather data on user command.")
         if hasattr(entity, 'update_weather'):
             await entity.update_weather()
         return StatusCodes.OK
     else:
-        # For any other command, state it's not implemented.
         _LOG.warning(f"Received unhandled command, ignoring: {command}")
         return StatusCodes.NOT_IMPLEMENTED
 
@@ -35,13 +31,10 @@ class WeatherEntity(media_player.MediaPlayer):
     """Weather display entity as a media player."""
 
     def __init__(self, entity_id: str, name: str, weather_client, location_name: str, api=None):
-        # Mimic the working HDFury example with a minimal feature set
-        # for interactive capabilities.
         features = [
             media_player.Features.ON_OFF,
         ]
 
-        # Define the initial attributes for display.
         initial_attributes = {
             media_player.Attributes.STATE: media_player.States.ON,
             media_player.Attributes.MEDIA_TITLE: location_name,
@@ -50,14 +43,12 @@ class WeatherEntity(media_player.MediaPlayer):
             media_player.Attributes.MEDIA_IMAGE_URL: "",
         }
 
-        # Call the parent constructor
         super().__init__(
             identifier=entity_id,
             name=name,
             features=features,
             attributes=initial_attributes,
             cmd_handler=weather_command_handler,
-            # THE KEY CHANGE: Set the device class to get a simpler UI layout
             device_class=media_player.DeviceClasses.RECEIVER
         )
 
@@ -127,9 +118,7 @@ class WeatherEntity(media_player.MediaPlayer):
                 media_player.Attributes.MEDIA_ALBUM: "Update failed",
             })
 
-        # Update local attributes
         self.attributes.update(new_attributes)
 
-        # Notify the remote of attribute changes if we're configured
         if self._api and self._api.configured_entities.contains(self.id):
             self._api.configured_entities.update_attributes(self.id, self.attributes)

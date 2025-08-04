@@ -17,10 +17,8 @@ class WeatherConfig:
     def __init__(self):
         self._config_dir = os.getenv("UC_CONFIG_HOME")
         if not self._config_dir:
-            # Default path if UC_CONFIG_HOME is not set (for local dev)
             self._config_dir = os.path.join(os.path.dirname(__file__), '..', 'config')
         
-        # Ensure the directory exists
         os.makedirs(self._config_dir, exist_ok=True)
         
         self._config_path = os.path.join(self._config_dir, CONFIG_FILE_NAME)
