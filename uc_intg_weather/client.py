@@ -1,6 +1,7 @@
 """Weather API client using Open-Meteo."""
 
 import logging
+import ssl
 from typing import Dict, Optional, Tuple
 import aiohttp
 import asyncio
@@ -118,7 +119,6 @@ class WeatherClient:
         if self.session is None or self.session.closed:
             timeout = aiohttp.ClientTimeout(total=30)
             # Create SSL context that doesn't verify certificates (for pyinstaller builds)
-            import ssl
             ssl_context = ssl.create_default_context()
             ssl_context.check_hostname = False
             ssl_context.verify_mode = ssl.CERT_NONE
@@ -220,7 +220,6 @@ class WeatherClient:
             
             timeout = aiohttp.ClientTimeout(total=30)
             # Create SSL context that doesn't verify certificates (for pyinstaller builds)
-            import ssl
             ssl_context = ssl.create_default_context()
             ssl_context.check_hostname = False
             ssl_context.verify_mode = ssl.CERT_NONE

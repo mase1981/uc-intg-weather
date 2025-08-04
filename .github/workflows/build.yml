@@ -48,15 +48,24 @@ jobs:
             bash -c \
             "cd /workspace && \
               python -m pip install -r requirements.txt && \
-              pyinstaller --clean --onedir --name intg-${DRIVER_ID} --collect-all zeroconf uc_intg_${INTG_NAME}/driver.py"
+              pyinstaller --clean --onefile --name intg-${DRIVER_ID} \
+                --hidden-import=uc_intg_${INTG_NAME} \
+                --hidden-import=uc_intg_${INTG_NAME}.client \
+                --hidden-import=uc_intg_${INTG_NAME}.config \
+                --hidden-import=uc_intg_${INTG_NAME}.weather_entity \
+                --add-data uc_intg_${INTG_NAME}/icons:uc_intg_${INTG_NAME}/icons \
+                --collect-all zeroconf \
+                --collect-all uc_intg_${INTG_NAME} \
+                uc_intg_${INTG_NAME}/driver.py"
 
       - name: Prepare artifacts
         shell: bash
         run: |
           mkdir -p artifacts/bin
-          mv dist/intg-${{ env.DRIVER_ID }}/* artifacts/bin
-          mv artifacts/bin/intg-${{ env.DRIVER_ID }} artifacts/bin/driver
+          mv dist/intg-${{ env.DRIVER_ID }} artifacts/bin/driver
           cp driver.json artifacts/
+          # Copy icon files to bin directory for runtime access
+          cp -r uc_intg_${{ env.INTG_NAME }}/icons artifacts/bin/
           echo "ARTIFACT_NAME=uc-intg-${{ env.DRIVER_ID }}-${{ env.VERSION }}-aarch64" >> $GITHUB_ENV
           
       - name: Create upload artifact archive

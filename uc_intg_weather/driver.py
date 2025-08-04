@@ -6,13 +6,9 @@ Displays current weather conditions using Open-Meteo API.
 import asyncio
 import logging
 import os
-import sys
 from pathlib import Path
 from typing import Any, Dict
 from datetime import datetime
-
-# Add the parent directory to Python path for imports
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import ucapi
 from ucapi import DeviceStates, Events, IntegrationSetupError
