@@ -1,4 +1,3 @@
-# uc_intg_weather/config.py
 """Configuration management for the Weather integration."""
 
 import os
@@ -29,6 +28,7 @@ class WeatherConfig:
             "latitude": None,
             "longitude": None,
             "location_name": None,
+            "temp_unit": "fahrenheit",  # Add temp_unit with a default
         }
 
     async def load(self):
@@ -40,7 +40,9 @@ class WeatherConfig:
         try:
             async with aiofiles.open(self._config_path, "r") as f:
                 content = await f.read()
-                self._data = json.loads(content)
+                # Load new data but keep defaults for any missing keys
+                loaded_data = json.loads(content)
+                self._data.update(loaded_data)
                 _LOG.info("Successfully loaded configuration.")
         except Exception as e:
             _LOG.error(f"Failed to load configuration from {self._config_path}: {e}")
@@ -54,12 +56,13 @@ class WeatherConfig:
         except Exception as e:
             _LOG.error(f"Failed to save configuration: {e}")
 
-    def set_location(self, location_input: str, latitude: float, longitude: float, location_name: str):
-        """Update location data."""
+    def set_location(self, location_input: str, latitude: float, longitude: float, location_name: str, temp_unit: str):
+        """Update location and temperature unit data."""
         self._data["location_input"] = location_input
         self._data["latitude"] = latitude
         self._data["longitude"] = longitude
         self._data["location_name"] = location_name
+        self._data["temp_unit"] = temp_unit
 
     def is_configured(self) -> bool:
         """Check if essential configuration (coordinates) is present."""
@@ -76,3 +79,7 @@ class WeatherConfig:
     def get_location_name(self) -> Optional[str]:
         """Return the friendly location name."""
         return self._data.get("location_name")
+
+    def get_temp_unit(self) -> str:
+        """Return the configured temperature unit."""
+        return self._data.get("temp_unit", "fahrenheit")
