@@ -36,13 +36,13 @@ class WeatherEntity(MediaPlayer):
     """Weather display entity as a media player."""
 
     def __init__(self, entity_id: str, name: str, weather_client, location_name: str, api=None):
-        # By only specifying these features, the UI will not show buttons for play/pause, shuffle, repeat, etc.
+        # We still declare the features we support for API correctness.
         features = [
-            Features.ON_OFF,          # We use the ON command as a "Refresh" button
-            Features.MEDIA_TITLE,     # Used for the location name
-            Features.MEDIA_ARTIST,    # Used for the temperature
-            Features.MEDIA_ALBUM,     # Used for the weather description
-            Features.MEDIA_IMAGE_URL, # Used for the weather icon
+            Features.ON_OFF,          # The 'power' button, used for refresh
+            Features.MEDIA_TITLE,
+            Features.MEDIA_ARTIST,
+            Features.MEDIA_ALBUM,
+            Features.MEDIA_IMAGE_URL,
         ]
 
         # The entity state is always ON.
@@ -51,7 +51,13 @@ class WeatherEntity(MediaPlayer):
             Attributes.MEDIA_TITLE: location_name,
             Attributes.MEDIA_ARTIST: "Loading...",
             Attributes.MEDIA_ALBUM: "Fetching weather...",
-            Attributes.MEDIA_IMAGE_URL: ""
+            Attributes.MEDIA_IMAGE_URL: "",
+
+            # This is the key change: Explicitly define the UI controls.
+            # We are creating a single row with just one button: 'power'.
+            Attributes.MEDIA_PLAYER_CONTROLS: [
+                ["power"]
+            ]
         }
 
         super().__init__(
@@ -70,19 +76,14 @@ class WeatherEntity(MediaPlayer):
 
     def _get_icon_base64(self, icon_filename: str) -> str:
         """Get the base64 encoded icon data."""
-        # Check cache first
         if icon_filename in self._icon_cache:
             return self._icon_cache[icon_filename]
 
-        # Get the directory where this script is located (works in package and dev)
         script_dir = os.path.dirname(os.path.abspath(__file__))
         icon_dir = os.path.join(script_dir, "icons")
         icon_path = os.path.join(icon_dir, icon_filename)
-
-        # Fallback icons
         fallback_icons = ["sun.png", "cloud.png"]
 
-        # Check if icon exists, otherwise try fallbacks
         if not os.path.exists(icon_path):
             _LOG.warning(f"Icon not found: {icon_filename}")
             for fallback in fallback_icons:
@@ -97,10 +98,8 @@ class WeatherEntity(MediaPlayer):
         try:
             with open(icon_path, 'rb') as f:
                 icon_data = f.read()
-                # Convert to base64 data URL
                 base64_data = base64.b64encode(icon_data).decode('utf-8')
                 data_url = f"data:image/png;base64,{base64_data}"
-                # Cache the result
                 self._icon_cache[icon_filename] = data_url
                 return data_url
         except Exception as e:
@@ -115,8 +114,6 @@ class WeatherEntity(MediaPlayer):
 
             if weather_data:
                 self._weather_data = weather_data
-
-                # Update attributes with weather data, keeping the state ON
                 new_attributes = {
                     Attributes.STATE: States.ON,
                     Attributes.MEDIA_TITLE: self.location_name,
@@ -124,50 +121,33 @@ class WeatherEntity(MediaPlayer):
                     Attributes.MEDIA_ALBUM: weather_data["description"],
                     Attributes.MEDIA_IMAGE_URL: self._get_icon_base64(weather_data["icon"])
                 }
-
-                # Update local attributes
-                for key, value in new_attributes.items():
-                    self.attributes[key] = value
-
-                # Notify the remote of attribute changes if we're configured
-                if self._api and self._api.configured_entities.contains(self.id):
-                    self._api.configured_entities.update_attributes(self.id, new_attributes)
-
-                _LOG.info(f"Weather updated: {weather_data['temperature']} - {weather_data['description']}")
             else:
                 # API failure - show error state
-                error_attributes = {
-                    Attributes.STATE: States.ON, # Keep state ON even on error
+                new_attributes = {
+                    Attributes.STATE: States.ON,
                     Attributes.MEDIA_TITLE: self.location_name,
                     Attributes.MEDIA_ARTIST: "N/A",
                     Attributes.MEDIA_ALBUM: "Data unavailable",
                     Attributes.MEDIA_IMAGE_URL: self._get_icon_base64("cloud.png")
                 }
-
-                # Update local attributes
-                for key, value in error_attributes.items():
-                    self.attributes[key] = value
-
-                # Notify the remote of attribute changes if we're configured
-                if self._api and self._api.configured_entities.contains(self.id):
-                    self._api.configured_entities.update_attributes(self.id, error_attributes)
-
                 _LOG.warning("Failed to fetch weather data")
 
         except Exception as e:
             _LOG.error(f"Error updating weather: {e}")
-            error_attributes = {
-                Attributes.STATE: States.ON, # Keep state ON even on error
+            new_attributes = {
+                Attributes.STATE: States.ON,
                 Attributes.MEDIA_TITLE: self.location_name,
                 Attributes.MEDIA_ARTIST: "Error",
                 Attributes.MEDIA_ALBUM: "Update failed",
                 Attributes.MEDIA_IMAGE_URL: self._get_icon_base64("cloud.png")
             }
 
-            # Update local attributes
-            for key, value in error_attributes.items():
-                self.attributes[key] = value
+        # Update local attributes
+        for key, value in new_attributes.items():
+            self.attributes[key] = value
 
-            # Notify the remote of attribute changes if we're configured
-            if self._api and self._api.configured_entities.contains(self.id):
-                self._api.configured_entities.update_attributes(self.id, error_attributes)
+        # Notify the remote of attribute changes if we're configured
+        if self._api and self._api.configured_entities.contains(self.id):
+            self._api.configured_entities.update_attributes(self.id, self.attributes)
+            if "temperature" in new_attributes.get(Attributes.MEDIA_ARTIST, ""):
+                 _LOG.info(f"Weather updated: {new_attributes[Attributes.MEDIA_ARTIST]} - {new_attributes[Attributes.MEDIA_ALBUM]}")
