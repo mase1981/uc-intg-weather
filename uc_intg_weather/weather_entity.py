@@ -23,11 +23,9 @@ async def weather_command_handler(entity, command: str, params: dict[str, Any] |
         _LOG.info("Refreshing weather data on user command.")
         if hasattr(entity, 'update_weather'):
             await entity.update_weather()
-        # The entity is always considered 'ON', so we just return OK.
         return StatusCodes.OK
     else:
-        # For any other command (like OFF, shuffle, etc.), log it and state it's not implemented.
-        # This will prevent the UI from erroring out.
+        # For any other command, state it's not implemented.
         _LOG.warning(f"Received unhandled command, ignoring: {command}")
         return StatusCodes.NOT_IMPLEMENTED
 
@@ -36,30 +34,24 @@ class WeatherEntity(MediaPlayer):
     """Weather display entity as a media player."""
 
     def __init__(self, entity_id: str, name: str, weather_client, location_name: str, api=None):
-        # We still declare the features we support for API correctness.
         features = [
-            Features.ON_OFF,          # The 'power' button, used for refresh
+            Features.ON_OFF,
             Features.MEDIA_TITLE,
             Features.MEDIA_ARTIST,
             Features.MEDIA_ALBUM,
             Features.MEDIA_IMAGE_URL,
         ]
 
-        # The entity state is always ON.
+        # Define the attributes the constructor officially supports
         initial_attributes = {
             Attributes.STATE: States.ON,
             Attributes.MEDIA_TITLE: location_name,
             Attributes.MEDIA_ARTIST: "Loading...",
             Attributes.MEDIA_ALBUM: "Fetching weather...",
             Attributes.MEDIA_IMAGE_URL: "",
-
-            # This is the key change: Explicitly define the UI controls.
-            # We are creating a single row with just one button: 'power'.
-            Attributes.MEDIA_PLAYER_CONTROLS: [
-                ["power"]
-            ]
         }
 
+        # Call the parent constructor with only the officially recognized attributes
         super().__init__(
             identifier=entity_id,
             name=name,
@@ -67,6 +59,13 @@ class WeatherEntity(MediaPlayer):
             attributes=initial_attributes,
             cmd_handler=weather_command_handler
         )
+        
+        # *** THE FIX: ***
+        # Now, add the custom controls attribute directly. We use the raw string 'media_player_controls'
+        # because it's not in the official 'Attributes' enum in the ucapi library.
+        self.attributes["media_player_controls"] = [
+            ["power"]
+        ]
 
         self.weather_client = weather_client
         self.location_name = location_name
@@ -108,46 +107,35 @@ class WeatherEntity(MediaPlayer):
 
     async def update_weather(self) -> None:
         """Update weather data from API."""
+        new_attributes = self.attributes.copy()
         try:
             _LOG.debug("Updating weather data...")
             weather_data = await self.weather_client.get_current_weather()
 
             if weather_data:
-                self._weather_data = weather_data
-                new_attributes = {
-                    Attributes.STATE: States.ON,
-                    Attributes.MEDIA_TITLE: self.location_name,
+                new_attributes.update({
                     Attributes.MEDIA_ARTIST: weather_data["temperature"],
                     Attributes.MEDIA_ALBUM: weather_data["description"],
                     Attributes.MEDIA_IMAGE_URL: self._get_icon_base64(weather_data["icon"])
-                }
+                })
+                _LOG.info(f"Weather updated: {weather_data['temperature']} - {weather_data['description']}")
             else:
-                # API failure - show error state
-                new_attributes = {
-                    Attributes.STATE: States.ON,
-                    Attributes.MEDIA_TITLE: self.location_name,
+                _LOG.warning("Failed to fetch weather data")
+                new_attributes.update({
                     Attributes.MEDIA_ARTIST: "N/A",
                     Attributes.MEDIA_ALBUM: "Data unavailable",
-                    Attributes.MEDIA_IMAGE_URL: self._get_icon_base64("cloud.png")
-                }
-                _LOG.warning("Failed to fetch weather data")
+                })
 
         except Exception as e:
             _LOG.error(f"Error updating weather: {e}")
-            new_attributes = {
-                Attributes.STATE: States.ON,
-                Attributes.MEDIA_TITLE: self.location_name,
+            new_attributes.update({
                 Attributes.MEDIA_ARTIST: "Error",
                 Attributes.MEDIA_ALBUM: "Update failed",
-                Attributes.MEDIA_IMAGE_URL: self._get_icon_base64("cloud.png")
-            }
+            })
 
         # Update local attributes
-        for key, value in new_attributes.items():
-            self.attributes[key] = value
+        self.attributes.update(new_attributes)
 
         # Notify the remote of attribute changes if we're configured
         if self._api and self._api.configured_entities.contains(self.id):
             self._api.configured_entities.update_attributes(self.id, self.attributes)
-            if "temperature" in new_attributes.get(Attributes.MEDIA_ARTIST, ""):
-                 _LOG.info(f"Weather updated: {new_attributes[Attributes.MEDIA_ARTIST]} - {new_attributes[Attributes.MEDIA_ALBUM]}")
