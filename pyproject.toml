@@ -1,3 +1,5 @@
+# pyproject.toml
+
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
@@ -15,7 +17,7 @@ requires-python = ">=3.10"
 dependencies = [
     "ucapi>=0.3.1",
     "aiohttp>=3.8.0",
-    certifi,
+    "certifi"
 ]
 
 [project.urls]

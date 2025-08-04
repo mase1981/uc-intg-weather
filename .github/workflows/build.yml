@@ -1,3 +1,5 @@
+# .github/workflows/build.yml
+
 # Manual triggered GitHub action to build a distribution binary of the Python integration driver and attach it to a release draft including a hash file
 ---
 name: "Build & Draft Release"
@@ -48,24 +50,20 @@ jobs:
             bash -c \
             "cd /workspace && \
               python -m pip install -r requirements.txt && \
-              pyinstaller --clean --onefile --name intg-${DRIVER_ID} \
-                --hidden-import=uc_intg_${INTG_NAME} \
-                --hidden-import=uc_intg_${INTG_NAME}.client \
-                --hidden-import=uc_intg_${INTG_NAME}.config \
-                --hidden-import=uc_intg_${INTG_NAME}.weather_entity \
+              pyinstaller --clean --onedir --name intg-${DRIVER_ID} \
                 --add-data uc_intg_${INTG_NAME}/icons:uc_intg_${INTG_NAME}/icons \
                 --collect-all zeroconf \
-                --collect-all uc_intg_${INTG_NAME} \
-                run.py"
+                uc_intg_${INTG_NAME}/driver.py"
 
       - name: Prepare artifacts
         shell: bash
         run: |
           mkdir -p artifacts/bin
-          mv dist/intg-${{ env.DRIVER_ID }} artifacts/bin/driver
+          # Move all the contents of the pyinstaller build dir to our bin dir
+          mv dist/intg-${{ env.DRIVER_ID }}/* artifacts/bin
+          # Rename the main executable to 'driver'
+          mv artifacts/bin/intg-${{ env.DRIVER_ID }} artifacts/bin/driver
           cp driver.json artifacts/
-          # Copy icon files to bin directory for runtime access
-          cp -r uc_intg_${{ env.INTG_NAME }}/icons artifacts/bin/
           echo "ARTIFACT_NAME=uc-intg-${{ env.DRIVER_ID }}-${{ env.VERSION }}-aarch64" >> $GITHUB_ENV
 
       - name: Create upload artifact archive
