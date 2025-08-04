@@ -1,12 +1,16 @@
 {
   "driver_id": "weather_display",
-  "version": "1.0.14",
+  "version": "1.1.15",
   "min_core_api": "0.18.0",
   "name": {
-    "en": "Weather Display"
+    "en": "Weather Display",
+    "de": "Wetter Anzeige",
+    "fr": "Affichage Météo"
   },
   "description": {
-    "en": "Display current weather conditions with beautiful icons"
+    "en": "Display current weather conditions with beautiful icons",
+    "de": "Aktuelle Wetterbedingungen mit schönen Symbolen anzeigen",
+    "fr": "Afficher les conditions météorologiques actuelles avec de belles icônes"
   },
   "developer": {
     "name": "Meir Miyara",
@@ -17,17 +21,38 @@
   "icon": "uc:weather",
   "setup_data_schema": {
     "title": {
-      "en": "Weather Location"
+      "en": "Weather Location",
+      "de": "Wetter Standort",
+      "fr": "Emplacement Météo"
     },
     "settings": [
       {
         "id": "location",
         "label": {
-          "en": "Location (ZIP code or City, State)"
+          "en": "Location (ZIP/Postal code or City, State/Country)",
+          "de": "Standort (PLZ oder Stadt, Bundesland/Land)",
+          "fr": "Emplacement (Code postal ou Ville, État/Pays)"
         },
         "field": {
           "text": {
             "value": ""
+          }
+        }
+      },
+      {
+        "id": "temperature_unit",
+        "label": {
+          "en": "Temperature Unit",
+          "de": "Temperatureinheit",
+          "fr": "Unité de température"
+        },
+        "field": {
+          "select": {
+            "value": "fahrenheit",
+            "options": [
+              {"value": "fahrenheit", "label": {"en": "Fahrenheit (°F)"}},
+              {"value": "celsius", "label": {"en": "Celsius (°C)"}}
+            ]
           }
         }
       }

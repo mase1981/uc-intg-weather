@@ -18,10 +18,11 @@ class WeatherClient:
     WEATHER_ICONS_NIGHT = {0:"moon.png",1:"moon-cloud.png",2:"moon-cloud.png",3:"cloud.png",45:"fog.png",48:"fog.png",51:"drizzle.png",53:"drizzle.png",55:"drizzle.png",56:"drizzle.png",57:"drizzle.png",61:"rain.png",63:"rain.png",65:"rain-heavy.png",66:"rain.png",67:"rain-heavy.png",71:"snow.png",73:"snow.png",75:"snow-heavy.png",77:"snow.png",80:"rain.png",81:"rain.png",82:"rain-heavy.png",85:"snow.png",86:"snow-heavy.png",95:"thunderstorm.png",96:"thunderstorm.png",99:"thunderstorm.png"}
     WEATHER_DESCRIPTIONS = {0:"Clear sky",1:"Mainly clear",2:"Partly cloudy",3:"Overcast",45:"Fog",48:"Depositing rime fog",51:"Light drizzle",53:"Moderate drizzle",55:"Dense drizzle",56:"Light freezing drizzle",57:"Dense freezing drizzle",61:"Slight rain",63:"Moderate rain",65:"Heavy rain",66:"Light freezing rain",67:"Heavy freezing rain",71:"Slight snow",73:"Moderate snow",75:"Heavy snow",77:"Snow grains",80:"Light rain showers",81:"Moderate rain showers",82:"Heavy rain showers",85:"Light snow showers",86:"Heavy snow showers",95:"Thunderstorm",96:"Thunderstorm with hail",99:"Thunderstorm with heavy hail"}
 
-    def __init__(self, latitude: float, longitude: float, temp_unit: str = "fahrenheit"):
+
+    def __init__(self, latitude: float, longitude: float, temperature_unit: str = "fahrenheit"):
         self.latitude = latitude
         self.longitude = longitude
-        self.temp_unit = temp_unit
+        self.temperature_unit = temperature_unit
         self.ssl_context = ssl.create_default_context(cafile=certifi.where())
         self.session: aiohttp.ClientSession | None = None
 
@@ -48,7 +49,7 @@ class WeatherClient:
                 "latitude": self.latitude,
                 "longitude": self.longitude,
                 "current": "temperature_2m,weather_code,relative_humidity_2m,wind_speed_10m,is_day",
-                "temperature_unit": self.temp_unit,
+                "temperature_unit": self.temperature_unit,
                 "wind_speed_unit": "mph",
                 "timezone": "auto"
             }
@@ -66,7 +67,9 @@ class WeatherClient:
                     else:
                         icon = self.WEATHER_ICONS_NIGHT.get(weather_code, "moon.png")
                     
-                    unit_symbol = '°F' if self.temp_unit == 'fahrenheit' else '°C'
+                    # Use appropriate unit symbol
+                    unit_symbol = "°F" if self.temperature_unit == "fahrenheit" else "°C"
+                    
                     result = {
                         "temperature": f"{current.get('temperature_2m', 0):.1f}{unit_symbol}",
                         "description": self.WEATHER_DESCRIPTIONS.get(weather_code, "Unknown"),
@@ -98,13 +101,15 @@ class WeatherClient:
             location = location.strip()
             _LOG.info(f"Geocoding location: '{location}'")
             
-            # Removed ZIP code regex to treat all inputs equally.
-            # This trusts the user to provide specific info like "Postal Code, Country"
-            # which works better with the geocoding API.
+            # Updated pattern to support international postal codes (2-10 alphanumeric chars with spaces/hyphens)
+            postal_pattern = re.compile(r'^[A-Z0-9\s-]{2,10}$', re.IGNORECASE)
             search_query = location
 
+            if postal_pattern.match(location):
+                _LOG.info(f"Detected postal/ZIP code: {search_query}")
+
             url = "https://geocoding-api.open-meteo.com/v1/search"
-            params = {"name": search_query, "count": 1, "language": "en", "format": "json"}
+            params = {"name": search_query, "count": 5, "language": "en", "format": "json"}
             
             ssl_context = ssl.create_default_context(cafile=certifi.where())
             connector = aiohttp.TCPConnector(ssl=ssl_context)
@@ -121,12 +126,21 @@ class WeatherClient:
                         if not results:
                             raise ValueError(f"Location '{location}' not found")
 
+                        # For postal codes, prefer results in the user's likely country
+                        # but don't filter out non-US results
+                        if postal_pattern.match(location):
+                            # Check if it looks like a US ZIP (5 digits)
+                            if re.match(r'^\d{5}(-\d{4})?$', location):
+                                us_results = [r for r in results if r.get("country") == "United States"]
+                                if us_results:
+                                    results = us_results
+                        
                         result = results[0]
                         latitude = result.get("latitude")
                         longitude = result.get("longitude")
                         name = result.get("name", "")
                         country = result.get("country", "")
-                        admin1 = result.get("admin1", "")
+                        admin1 = result.get("admin1", "")  # State/Province
 
                         if country == "United States" and admin1:
                             location_name = f"{name}, {admin1}"
