@@ -15,6 +15,7 @@ requires-python = ">=3.10"
 dependencies = [
     "ucapi>=0.3.1",
     "aiohttp>=3.8.0",
+    certifi,
 ]
 
 [project.urls]

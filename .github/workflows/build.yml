@@ -56,7 +56,7 @@ jobs:
                 --add-data uc_intg_${INTG_NAME}/icons:uc_intg_${INTG_NAME}/icons \
                 --collect-all zeroconf \
                 --collect-all uc_intg_${INTG_NAME} \
-                uc_intg_${INTG_NAME}/driver.py"
+                run.py"
 
       - name: Prepare artifacts
         shell: bash
@@ -67,13 +67,13 @@ jobs:
           # Copy icon files to bin directory for runtime access
           cp -r uc_intg_${{ env.INTG_NAME }}/icons artifacts/bin/
           echo "ARTIFACT_NAME=uc-intg-${{ env.DRIVER_ID }}-${{ env.VERSION }}-aarch64" >> $GITHUB_ENV
-          
+
       - name: Create upload artifact archive
         shell: bash
-        run: | 
+        run: |
           tar czvf ${{ env.ARTIFACT_NAME }}.tar.gz -C ${GITHUB_WORKSPACE}/artifacts .
           ls -lah
-          
+
       - uses: actions/upload-artifact@v4
         id: upload_artifact
         with:
@@ -81,7 +81,7 @@ jobs:
           path: ${{ env.ARTIFACT_NAME }}.tar.gz
           if-no-files-found: error
           retention-days: 3
-            
+
   release:
     name: Create Release
     runs-on: ubuntu-24.04
@@ -98,7 +98,7 @@ jobs:
           ls -R
           # extract tar.gz build archives from downloaded artifacts
           # (wrapped in tar from actions/upload-artifact, then extracted into a directory by actions/download-artifact)
-          for D in * 
+          for D in *
             do if [ -d "${D}" ]; then
               mv $D/* ./
             fi
