@@ -13,8 +13,16 @@ class WeatherConfig:
     
     def __init__(self):
         # Use UC_CONFIG_HOME if set, otherwise use default
-        config_base = os.getenv("UC_CONFIG_HOME") or os.path.expanduser("~/.config")
-        self.config_dir = os.path.join(config_base, "uc_intg_weather")
+        config_base = os.getenv("UC_CONFIG_HOME")
+        if not config_base:
+            # For packaged builds on the Remote
+            if os.path.exists("/etc/custom-intg"):
+                config_base = "/etc/custom-intg/weather_display"
+            else:
+                # For local development
+                config_base = os.path.expanduser("~/.config")
+        
+        self.config_dir = config_base
         self.config_file = os.path.join(self.config_dir, "config.json")
         self._config = {
             "location": "",

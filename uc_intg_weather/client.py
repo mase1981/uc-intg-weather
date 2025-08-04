@@ -117,7 +117,14 @@ class WeatherClient:
         """Get or create HTTP session."""
         if self.session is None or self.session.closed:
             timeout = aiohttp.ClientTimeout(total=30)
-            self.session = aiohttp.ClientSession(timeout=timeout)
+            # Create SSL context that doesn't verify certificates (for pyinstaller builds)
+            import ssl
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+            
+            connector = aiohttp.TCPConnector(ssl=ssl_context)
+            self.session = aiohttp.ClientSession(timeout=timeout, connector=connector)
         return self.session
         
     async def close(self):
@@ -192,7 +199,8 @@ class WeatherClient:
             _LOG.info(f"Geocoding location: '{location}'")
             
             # Check if it's a ZIP code (5 digits, optionally followed by -4 digits)
-            zip_pattern = re.compile(r'^\d{5}(-\d{4})?$')
+            zip_pattern = re.compile(r'^\d{5}(-\d{4})?
+)
             
             if zip_pattern.match(location):
                 # For US ZIP codes, use the ZIP directly - Open-Meteo handles them well
@@ -211,7 +219,14 @@ class WeatherClient:
             }
             
             timeout = aiohttp.ClientTimeout(total=30)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
+            # Create SSL context that doesn't verify certificates (for pyinstaller builds)
+            import ssl
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+            
+            connector = aiohttp.TCPConnector(ssl=ssl_context)
+            async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
                 _LOG.debug(f"Geocoding request to {url} with params: {params}")
                 
                 async with session.get(url, params=params) as response:

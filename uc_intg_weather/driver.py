@@ -225,10 +225,45 @@ async def handle_setup(request: ucapi.SetupDriver) -> ucapi.SetupAction:
     _LOG.info(f"Handling setup request: {type(request).__name__}")
     
     if isinstance(request, ucapi.DriverSetupRequest):
-        # Check if this is a reconfiguration
-        reconfigure = request.reconfigure
-        _LOG.info(f"Setup request - reconfigure: {reconfigure}")
+        # Check if we already have setup data in the request
+        if request.setup_data and "location" in request.setup_data:
+            # User already entered location in the UI, process it directly
+            location = request.setup_data.get("location", "").strip()
+            if location:
+                _LOG.info(f"Processing location from setup_data: {location}")
+                try:
+                    # Geocode the location
+                    latitude, longitude, location_name = await WeatherClient.geocode_location(location)
+                    _LOG.info(f"Geocoded to: {location_name} ({latitude}, {longitude})")
+                    
+                    # Test the weather API
+                    test_client = WeatherClient(latitude, longitude)
+                    test_data = await test_client.get_current_weather()
+                    await test_client.close()
+                    
+                    if not test_data:
+                        raise Exception("Unable to fetch weather data for this location")
+                    
+                    _LOG.info(f"Weather test successful: {test_data['temperature']} - {test_data['description']}")
+                    
+                    # Save configuration
+                    CONFIG.set_location(location, latitude, longitude, location_name)
+                    await CONFIG.save()
+                    
+                    # Set up services immediately after successful setup
+                    loop.create_task(on_setup_complete())
+                    
+                    _LOG.info(f"Weather setup completed for {location_name}")
+                    return ucapi.SetupComplete()
+                    
+                except ValueError as e:
+                    _LOG.error(f"Location error: {e}")
+                    return ucapi.SetupError(IntegrationSetupError.OTHER)
+                except Exception as e:
+                    _LOG.error(f"Setup failed: {e}")
+                    return ucapi.SetupError(IntegrationSetupError.OTHER)
         
+        # No setup data, show the input form
         return ucapi.RequestUserInput(
             title={"en": "Weather Location Setup"},
             settings=[
@@ -246,15 +281,13 @@ async def handle_setup(request: ucapi.SetupDriver) -> ucapi.SetupAction:
         )
     
     if isinstance(request, ucapi.UserDataResponse):
+        # This should not happen with the new flow, but handle it for compatibility
         location = request.input_values.get("location", "").strip()
         if not location:
             return ucapi.SetupError(IntegrationSetupError.OTHER)
         
         try:
-            _LOG.info(f"Attempting to geocode location: {location}")
-            
-            # Show progress while we validate
-            await asyncio.sleep(0.1)  # Small delay for UI responsiveness
+            _LOG.info(f"Processing location from UserDataResponse: {location}")
             
             # Geocode the location
             latitude, longitude, location_name = await WeatherClient.geocode_location(location)
@@ -281,13 +314,16 @@ async def handle_setup(request: ucapi.SetupDriver) -> ucapi.SetupAction:
             return ucapi.SetupComplete()
             
         except ValueError as e:
-            # Location not found or invalid
             _LOG.error(f"Location error: {e}")
             return ucapi.SetupError(IntegrationSetupError.OTHER)
         except Exception as e:
-            # Other errors
             _LOG.error(f"Setup failed: {e}")
             return ucapi.SetupError(IntegrationSetupError.OTHER)
+    
+    # Handle abort
+    if isinstance(request, ucapi.AbortDriverSetup):
+        _LOG.info("Setup aborted by user")
+        return ucapi.SetupError(IntegrationSetupError.USER_CANCELLED)
     
     return ucapi.SetupError(IntegrationSetupError.OTHER)
 
