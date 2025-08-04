@@ -1,4 +1,3 @@
-# uc_intg_weather/driver.py
 """
 Weather integration driver for Unfolded Circle Remote.
 Displays current weather conditions using Open-Meteo API.
@@ -67,7 +66,8 @@ async def setup_weather_services():
     try:
         WEATHER_CLIENT = WeatherClient(
             CONFIG.get_latitude(),
-            CONFIG.get_longitude()
+            CONFIG.get_longitude(),
+            CONFIG.get_temperature_unit()
         )
 
         location_name = CONFIG.get_location_name()
@@ -218,13 +218,15 @@ async def handle_setup(request: ucapi.SetupDriver) -> ucapi.SetupAction:
     if isinstance(request, ucapi.DriverSetupRequest):
         if request.setup_data and "location" in request.setup_data:
             location = request.setup_data.get("location", "").strip()
+            use_celsius = request.setup_data.get("use_celsius", False)
+            temperature_unit = "celsius" if use_celsius else "fahrenheit"
             if location:
-                _LOG.info(f"Processing location from setup_data: {location}")
+                _LOG.info(f"Processing location from setup_data: {location}, unit: {temperature_unit}")
                 try:
                     latitude, longitude, location_name = await WeatherClient.geocode_location(location)
                     _LOG.info(f"Geocoded to: {location_name} ({latitude}, {longitude})")
 
-                    test_client = WeatherClient(latitude, longitude)
+                    test_client = WeatherClient(latitude, longitude, temperature_unit)
                     test_data = await test_client.get_current_weather()
                     await test_client.close()
 
@@ -234,7 +236,7 @@ async def handle_setup(request: ucapi.SetupDriver) -> ucapi.SetupAction:
                     _LOG.info(f"Weather test successful: {test_data['temperature']} - {test_data['description']}")
 
                     # Save configuration
-                    CONFIG.set_location(location, latitude, longitude, location_name)
+                    CONFIG.set_location(location, latitude, longitude, location_name, temperature_unit)
                     await CONFIG.save()
 
                     # Set up services immediately after successful setup
@@ -268,16 +270,18 @@ async def handle_setup(request: ucapi.SetupDriver) -> ucapi.SetupAction:
 
     if isinstance(request, ucapi.UserDataResponse):
         location = request.input_values.get("location", "").strip()
+        use_celsius = request.input_values.get("use_celsius", False)
+        temperature_unit = "celsius" if use_celsius else "fahrenheit"
         if not location:
             return ucapi.SetupError(IntegrationSetupError.OTHER)
 
         try:
-            _LOG.info(f"Processing location from UserDataResponse: {location}")
+            _LOG.info(f"Processing location from UserDataResponse: {location}, unit: {temperature_unit}")
 
             latitude, longitude, location_name = await WeatherClient.geocode_location(location)
             _LOG.info(f"Geocoded to: {location_name} ({latitude}, {longitude})")
 
-            test_client = WeatherClient(latitude, longitude)
+            test_client = WeatherClient(latitude, longitude, temperature_unit)
             test_data = await test_client.get_current_weather()
             await test_client.close()
 
@@ -286,7 +290,7 @@ async def handle_setup(request: ucapi.SetupDriver) -> ucapi.SetupAction:
 
             _LOG.info(f"Weather test successful: {test_data['temperature']} - {test_data['description']}")
 
-            CONFIG.set_location(location, latitude, longitude, location_name)
+            CONFIG.set_location(location, latitude, longitude, location_name, temperature_unit)
             await CONFIG.save()
 
             loop.create_task(on_setup_complete())

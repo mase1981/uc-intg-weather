@@ -29,6 +29,7 @@ class WeatherConfig:
             "latitude": None,
             "longitude": None,
             "location_name": None,
+            "temperature_unit": "fahrenheit",  # Default to fahrenheit
         }
 
     async def load(self):
@@ -54,12 +55,13 @@ class WeatherConfig:
         except Exception as e:
             _LOG.error(f"Failed to save configuration: {e}")
 
-    def set_location(self, location_input: str, latitude: float, longitude: float, location_name: str):
+    def set_location(self, location_input: str, latitude: float, longitude: float, location_name: str, temperature_unit: str = "fahrenheit"):
         """Update location data."""
         self._data["location_input"] = location_input
         self._data["latitude"] = latitude
         self._data["longitude"] = longitude
         self._data["location_name"] = location_name
+        self._data["temperature_unit"] = temperature_unit
 
     def is_configured(self) -> bool:
         """Check if essential configuration (coordinates) is present."""
@@ -76,3 +78,7 @@ class WeatherConfig:
     def get_location_name(self) -> Optional[str]:
         """Return the friendly location name."""
         return self._data.get("location_name")
+    
+    def get_temperature_unit(self) -> str:
+        """Return the configured temperature unit."""
+        return self._data.get("temperature_unit", "fahrenheit")

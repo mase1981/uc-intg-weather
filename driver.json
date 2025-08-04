@@ -1,6 +1,6 @@
 {
   "driver_id": "weather_display",
-  "version": "1.0.10",
+  "version": "1.1.16",
   "min_core_api": "0.18.0",
   "name": {
     "en": "Weather Display",
@@ -29,13 +29,26 @@
       {
         "id": "location",
         "label": {
-          "en": "Location (ZIP code or City, State)",
-          "de": "Standort (PLZ oder Stadt, Bundesland)",
-          "fr": "Emplacement (Code postal ou Ville, État)"
+          "en": "Location (ZIP/Postal code or City, State/Country)",
+          "de": "Standort (PLZ oder Stadt, Bundesland/Land)",
+          "fr": "Emplacement (Code postal ou Ville, État/Pays)"
         },
         "field": {
           "text": {
             "value": ""
+          }
+        }
+      },
+      {
+        "id": "use_celsius",
+        "label": {
+          "en": "Use Celsius (°C) instead of Fahrenheit (°F)",
+          "de": "Celsius (°C) statt Fahrenheit (°F) verwenden",
+          "fr": "Utiliser Celsius (°C) au lieu de Fahrenheit (°F)"
+        },
+        "field": {
+          "checkbox": {
+            "value": false
           }
         }
       }
