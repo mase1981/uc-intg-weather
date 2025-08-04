@@ -1,0 +1,50 @@
+{
+  "driver_id": "weather_display",
+  "version": "1.0.0",
+  "min_core_api": "0.18.0",
+  "name": {
+    "en": "Weather Display",
+    "de": "Wetter Anzeige",
+    "fr": "Affichage Météo"
+  },
+  "description": {
+    "en": "Display current weather conditions with beautiful icons",
+    "de": "Aktuelle Wetterbedingungen mit schönen Symbolen anzeigen",
+    "fr": "Afficher les conditions météorologiques actuelles avec de belles icônes"
+  },
+  "developer": {
+    "name": "Meir Miyara",
+    "email": "meir.miyara@example.com",
+    "url": "https://github.com/mase1981"
+  },
+  "home_page": "https://github.com/mase1981/uc-intg-weather",
+  "icon": "uc:weather",
+  "setup_data_schema": {
+    "title": {
+      "en": "Weather Configuration",
+      "de": "Wetter Konfiguration",
+      "fr": "Configuration Météo"
+    },
+    "settings": [
+      {
+        "id": "location",
+        "label": {
+          "en": "Location",
+          "de": "Standort",
+          "fr": "Emplacement"
+        },
+        "field": {
+          "text": {
+            "value": "",
+            "placeholder": "12345 or New York, NY"
+          }
+        },
+        "description": {
+          "en": "Enter ZIP code (12345) or City, State (New York, NY)",
+          "de": "PLZ (12345) oder Stadt, Bundesland eingeben",
+          "fr": "Entrez le code postal ou Ville, État"
+        }
+      }
+    ]
+  }
+}

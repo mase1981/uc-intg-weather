@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  weather-integration:
+    build: .
+    container_name: uc-intg-weather
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./config:/app/config
+      - ./cache:/app/cache
+    environment:
+      - UC_CONFIG_HOME=/app/config
+      - UC_INTEGRATION_HTTP_PORT=9094
+      - UC_INTEGRATION_INTERFACE=0.0.0.0
+      - UC_DISABLE_MDNS_PUBLISH=false
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "9094:9094"

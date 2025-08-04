@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "uc-intg-weather"
+version = "1.0.0"
+description = "Weather integration for Unfolded Circle Remote"
+authors = [
+    {name = "Meir Miyara", email = "your.email@example.com"}
+]
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+dependencies = [
+    "ucapi>=0.3.1",
+    "aiohttp>=3.8.0",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/mase1981/uc-intg-weather"
+"Bug Reports" = "https://github.com/mase1981/uc-intg-weather/issues"
+"Source" = "https://github.com/mase1981/uc-intg-weather"
