@@ -195,7 +195,6 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 - 🐛 **Issues**: [GitHub Issues](../../issues)
 - 💬 **Discussions**: [GitHub Discussions](../../discussions)
-- 📧 **Contact**: [Your Email](mailto:your.email@example.com)
 
 ---
 
