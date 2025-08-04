@@ -167,34 +167,42 @@ async def on_subscribe_entities(entity_ids: list[str]) -> None:
 
 async def handle_setup(request: ucapi.SetupDriver) -> ucapi.SetupAction:
     """Handle setup process."""
-    _LOG.info(f"Handling setup request: {type(request).__name__}")
+    _LOG.info(f"Handling setup request: {type(request).__name__} (reconfigure: {getattr(request, 'reconfigure', 'N/A')})")
 
-    if isinstance(request, ucapi.DriverSetupRequest):
-        location = request.setup_data.get("location", "").strip()
-        temp_unit = request.setup_data.get("temp_unit", "fahrenheit")
+    async def process_location_data(location: str, temp_unit: str):
+        latitude, longitude, location_name = await WeatherClient.geocode_location(location)
+        test_client = WeatherClient(latitude, longitude, temp_unit)
+        test_data = await test_client.get_current_weather()
+        await test_client.close()
+        if not test_data:
+            raise Exception("Unable to fetch weather data for this location")
+        CONFIG.set_location(location, latitude, longitude, location_name, temp_unit)
+        await CONFIG.save()
+        loop.create_task(on_setup_complete())
 
+    # This logic handles both first-time setup and reconfiguration requests.
+    if isinstance(request, (ucapi.DriverSetupRequest, ucapi.UserDataResponse)):
+        # For UserDataResponse, data is in 'input_values'. For DriverSetupRequest, it's in 'setup_data'.
+        data = request.input_values if isinstance(request, ucapi.UserDataResponse) else request.setup_data
+        
+        # Always show the form if the user is reconfiguring or if no data is present
+        if getattr(request, 'reconfigure', False) or not data:
+            return ucapi.RequestUserInput(
+                title={"en": "Weather Location Setup"},
+                settings=[
+                    {"id": "location", "label": {"en": "Enter Location"}, "field": {"text": {"value": CONFIG.get_location_name() or "", "placeholder": "e.g., New York, NY or 90210, US"}}},
+                    {"id": "temp_unit", "label": {"en": "Temperature Unit"}, "field": {"select": {"options": [{"value": "fahrenheit", "label": {"en": "Fahrenheit (°F)"}}, {"value": "celsius", "label": {"en": "Celsius (°C)"}}], "value": CONFIG.get_temp_unit()}}}
+                ]
+            )
+
+        # Process the data received from either the initial form or UserDataResponse
+        location = data.get("location", "").strip()
+        temp_unit = data.get("temp_unit", "fahrenheit")
         if not location:
             return ucapi.SetupError("Location cannot be empty.")
-
-        _LOG.info(f"Processing setup data: Location='{location}', Unit='{temp_unit}'")
         try:
-            latitude, longitude, location_name = await WeatherClient.geocode_location(location)
-            _LOG.info(f"Geocoded to: {location_name} ({latitude}, {longitude})")
-
-            test_client = WeatherClient(latitude, longitude, temp_unit)
-            test_data = await test_client.get_current_weather()
-            await test_client.close()
-
-            if not test_data:
-                raise Exception("Unable to fetch weather data for this location")
-
-            _LOG.info(f"Weather test successful: {test_data['temperature']} - {test_data['description']}")
-            CONFIG.set_location(location, latitude, longitude, location_name, temp_unit)
-            await CONFIG.save()
-            loop.create_task(on_setup_complete())
-            
+            await process_location_data(location, temp_unit)
             return ucapi.SetupComplete()
-
         except Exception as e:
             _LOG.error(f"Setup failed: {e}")
             return ucapi.SetupError(str(e))
@@ -203,7 +211,6 @@ async def handle_setup(request: ucapi.SetupDriver) -> ucapi.SetupAction:
         _LOG.info("Setup aborted by user")
         return ucapi.SetupError(IntegrationSetupError.USER_CANCELLED)
 
-    _LOG.warning(f"Unhandled setup request type: {type(request).__name__}")
     return ucapi.SetupError(IntegrationSetupError.OTHER)
 
 
@@ -230,8 +237,6 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         _LOG.info("Driver stopped by user.")
     finally:
-        if UPDATE_TASK:
-            UPDATE_TASK.cancel()
-        if WEATHER_CLIENT:
-            loop.run_until_complete(WEATHER_CLIENT.close())
+        if UPDATE_TASK: UPDATE_TASK.cancel()
+        if WEATHER_CLIENT: loop.run_until_complete(WEATHER_CLIENT.close())
         loop.close()

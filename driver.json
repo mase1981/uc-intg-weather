@@ -1,6 +1,6 @@
 {
   "driver_id": "weather_display",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "min_core_api": "0.18.0",
   "name": {
     "en": "Weather Display"
@@ -17,42 +17,17 @@
   "icon": "uc:weather",
   "setup_data_schema": {
     "title": {
-      "en": "Weather Location Setup"
+      "en": "Weather Location"
     },
     "settings": [
       {
         "id": "location",
         "label": {
-          "en": "Location"
+          "en": "Location (ZIP code or City, State)"
         },
         "field": {
           "text": {
-            "placeholder": "e.g., New York, NY or 90210, US or London, UK"
-          }
-        }
-      },
-      {
-        "id": "temp_unit",
-        "label": {
-          "en": "Temperature Unit"
-        },
-        "field": {
-          "select": {
-            "options": [
-              {
-                "value": "fahrenheit",
-                "label": {
-                  "en": "Fahrenheit (°F)"
-                }
-              },
-              {
-                "value": "celsius",
-                "label": {
-                  "en": "Celsius (°C)"
-                }
-              }
-            ],
-            "value": "fahrenheit"
+            "value": ""
           }
         }
       }
