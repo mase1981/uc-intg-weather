@@ -186,7 +186,7 @@ async def on_unsubscribe_entities(entity_ids: list[str]) -> None:
 
 async def handle_setup(request: ucapi.SetupDriver) -> ucapi.SetupAction:
     """Handle setup process."""
-    _LOG.info(f"Handling setup request: {type(request).__name__}")
+    _LOG.info(f"Handling setup request: {type(request).__name__} (reconfigure: {getattr(request, 'reconfigure', 'N/A')})")
 
     async def process_location_data(location: str, temp_unit: str):
         """Helper to geocode, test, and save location data."""
@@ -207,18 +207,21 @@ async def handle_setup(request: ucapi.SetupDriver) -> ucapi.SetupAction:
         _LOG.info(f"Weather setup completed for {location_name}")
 
     if isinstance(request, ucapi.DriverSetupRequest):
-        if request.setup_data and "location" in request.setup_data:
+        # THE FIX: Only process data automatically if it's NOT a reconfigure request.
+        # This ensures the settings page always shows when the user wants to change settings.
+        if not request.reconfigure and request.setup_data and "location" in request.setup_data:
             location = request.setup_data.get("location", "").strip()
             temp_unit = request.setup_data.get("temp_unit", "fahrenheit")
             if location:
-                _LOG.info(f"Processing location from setup_data: {location}")
+                _LOG.info(f"Processing existing setup data: {location}")
                 try:
                     await process_location_data(location, temp_unit)
                     return ucapi.SetupComplete()
                 except Exception as e:
-                    _LOG.error(f"Setup failed: {e}")
-                    return ucapi.SetupError(str(e))
+                    _LOG.error(f"Setup with existing data failed, showing form: {e}")
+                    # Fall through to show the form if processing fails
         
+        # Show the settings page for first-time setup OR for reconfiguration.
         return ucapi.RequestUserInput(
             title={"en": "Weather Location Setup"},
             settings=[
@@ -227,7 +230,7 @@ async def handle_setup(request: ucapi.SetupDriver) -> ucapi.SetupAction:
                     "label": {"en": "Enter Location"},
                     "field": {
                         "text": {
-                            "value": "",
+                            "value": CONFIG.get_location_name() or "", # Pre-fill with saved value
                             "placeholder": "e.g., New York, NY or 90210, US or London, UK"
                         }
                     }
@@ -241,7 +244,7 @@ async def handle_setup(request: ucapi.SetupDriver) -> ucapi.SetupAction:
                                 {"value": "fahrenheit", "label": {"en": "Fahrenheit (°F)"}},
                                 {"value": "celsius", "label": {"en": "Celsius (°C)"}}
                             ],
-                            "value": CONFIG.get_temp_unit()
+                            "value": CONFIG.get_temp_unit() # Pre-fill with saved value
                         }
                     }
                 }
