@@ -24,27 +24,12 @@ logging.basicConfig(
 )
 _LOG = logging.getLogger(__name__)
 
-UPDATE_INTERVAL_SECONDS = 3600  # 1 hour default
-MIN_UPDATE_INTERVAL = 600  # 10 minutes minimum
-MAX_UPDATE_INTERVAL = 14400  # 4 hours maximum
-DEFAULT_PORT = 9090  # Default port for UC integrations
-
-# Add smart update intervals based on time of day
 def get_smart_update_interval():
     """Get update interval based on time of day to save battery."""
     current_hour = datetime.now().hour
-
-    # Night hours (11 PM - 6 AM): Update every 4 hours
-    if current_hour >= 23 or current_hour < 6:
-        return 14400  # 4 hours
-
-    # Morning/Evening (6-9 AM, 5-8 PM): Update every 30 minutes
-    elif 6 <= current_hour < 9 or 17 <= current_hour < 20:
-        return 1800  # 30 minutes
-
-    # Daytime: Update every hour
-    else:
-        return 3600  # 1 hour
+    if current_hour >= 23 or current_hour < 6: return 14400
+    elif 6 <= current_hour < 9 or 17 <= current_hour < 20: return 1800
+    else: return 3600
 
 try:
     loop = asyncio.get_running_loop()
@@ -80,9 +65,7 @@ async def setup_weather_services():
         )
 
         API.available_entities.add(WEATHER_ENTITY)
-
         await asyncio.sleep(0.5)
-
         _LOG.info(f"Weather services set up for {location_name}")
         return True
 
@@ -94,39 +77,25 @@ async def setup_weather_services():
 def start_weather_updates():
     """Start the periodic weather update task."""
     global UPDATE_TASK
-
-    if UPDATE_TASK and not UPDATE_TASK.done():
-        _LOG.info("Update loop already running.")
-        return
-
+    if UPDATE_TASK and not UPDATE_TASK.done(): return
     _LOG.info("Starting weather update loop...")
     UPDATE_TASK = loop.create_task(weather_update_loop())
 
 
 async def weather_update_loop():
     """Periodic weather update loop with smart intervals."""
-    first_run = True
     while True:
         try:
             if WEATHER_ENTITY:
                 await WEATHER_ENTITY.update_weather()
-                _LOG.debug("Weather data updated")
-
-            # Determine next update interval
-            if first_run:
-                first_run = False
-                await asyncio.sleep(5)
-            else:
-                interval = get_smart_update_interval()
-                _LOG.info(f"Next weather update in {interval/60} minutes")
-                await asyncio.sleep(interval)
-
+            interval = get_smart_update_interval()
+            _LOG.info(f"Next weather update in {interval/60} minutes")
+            await asyncio.sleep(interval)
         except asyncio.CancelledError:
             break
         except Exception as e:
             _LOG.error(f"Error in weather update loop: {e}")
-            # Wait 5 minutes before retry on error
-            await asyncio.sleep(5 * 60)
+            await asyncio.sleep(300)
 
 
 async def on_setup_complete():
@@ -141,7 +110,6 @@ async def connect_and_start_weather():
         _LOG.error("Weather not configured, cannot connect")
         await API.set_device_state(DeviceStates.ERROR)
         return
-
     _LOG.info("Setting up weather services...")
     try:
         if await setup_weather_services():
@@ -150,7 +118,6 @@ async def connect_and_start_weather():
             _LOG.info("✅ Device state set to CONNECTED")
         else:
             await API.set_device_state(DeviceStates.ERROR)
-
     except Exception as e:
         _LOG.error(f"❌ Failed to setup weather services: {e}")
         await API.set_device_state(DeviceStates.ERROR)
@@ -162,32 +129,27 @@ async def on_connect() -> None:
     _LOG.info("Remote connected via WebSocket - confirming device state")
     if WEATHER_CLIENT and WEATHER_ENTITY:
         await API.set_device_state(DeviceStates.CONNECTED)
-        _LOG.info("✅ Device state confirmed as CONNECTED after remote connection")
         if WEATHER_ENTITY:
             await WEATHER_ENTITY.update_weather()
     else:
-        _LOG.info("Services not ready, attempting to set up...")
         await connect_and_start_weather()
 
 
 @API.listens_to(Events.DISCONNECT)
 async def on_disconnect() -> None:
-    """Called when the remote disconnects."""
     _LOG.info("Remote disconnected")
 
 
 @API.listens_to(Events.ENTER_STANDBY)
 async def on_enter_standby() -> None:
-    """Called when remote enters standby."""
-    _LOG.info("Remote entered standby - pausing updates")
     global UPDATE_TASK
+    _LOG.info("Remote entered standby - pausing updates")
     if UPDATE_TASK and not UPDATE_TASK.done():
         UPDATE_TASK.cancel()
 
 
 @API.listens_to(Events.EXIT_STANDBY)
 async def on_exit_standby() -> None:
-    """Called when remote exits standby."""
     _LOG.info("Remote exited standby - resuming updates")
     if WEATHER_ENTITY:
         await WEATHER_ENTITY.update_weather()
@@ -196,21 +158,12 @@ async def on_exit_standby() -> None:
 
 @API.listens_to(Events.SUBSCRIBE_ENTITIES)
 async def on_subscribe_entities(entity_ids: list[str]) -> None:
-    """Listen for when the remote UI subscribes to our entity."""
-    _LOG.debug(f"Received entity subscription for IDs: {entity_ids}")
     if WEATHER_ENTITY and WEATHER_ENTITY.id in entity_ids:
         _LOG.info("UI subscribed to our entity. Moving to configured list and starting updates.")
         API.configured_entities.add(WEATHER_ENTITY)
         start_weather_updates()
 
 
-@API.listens_to(Events.UNSUBSCRIBE_ENTITIES)
-async def on_unsubscribe_entities(entity_ids: list[str]) -> None:
-    """Called when the remote unsubscribes from entities."""
-    _LOG.debug(f"Received entity unsubscription for IDs: {entity_ids}")
-
-
-# Setup handler
 async def handle_setup(request: ucapi.SetupDriver) -> ucapi.SetupAction:
     """Handle setup process."""
     _LOG.info(f"Handling setup request: {type(request).__name__}")
@@ -218,92 +171,53 @@ async def handle_setup(request: ucapi.SetupDriver) -> ucapi.SetupAction:
     if isinstance(request, ucapi.DriverSetupRequest):
         if request.setup_data and "location" in request.setup_data:
             location = request.setup_data.get("location", "").strip()
-            use_celsius = request.setup_data.get("use_celsius", False)
+            
+            # *** THE FIX: ***
+            # Check the value correctly, handling both boolean False and string "false"
+            use_celsius_value = request.setup_data.get("use_celsius", False)
+            use_celsius = str(use_celsius_value).lower() == 'true'
+
             temperature_unit = "celsius" if use_celsius else "fahrenheit"
             if location:
                 _LOG.info(f"Processing location from setup_data: {location}, unit: {temperature_unit}")
                 try:
                     latitude, longitude, location_name = await WeatherClient.geocode_location(location)
-                    _LOG.info(f"Geocoded to: {location_name} ({latitude}, {longitude})")
-
                     test_client = WeatherClient(latitude, longitude, temperature_unit)
                     test_data = await test_client.get_current_weather()
                     await test_client.close()
-
-                    if not test_data:
-                        raise Exception("Unable to fetch weather data for this location")
-
-                    _LOG.info(f"Weather test successful: {test_data['temperature']} - {test_data['description']}")
-
-                    # Save configuration
+                    if not test_data: raise Exception("Unable to fetch weather data for this location")
+                    
                     CONFIG.set_location(location, latitude, longitude, location_name, temperature_unit)
                     await CONFIG.save()
-
-                    # Set up services immediately after successful setup
                     loop.create_task(on_setup_complete())
-
-                    _LOG.info(f"Weather setup completed for {location_name}")
                     return ucapi.SetupComplete()
-
-                except ValueError as e:
-                    _LOG.error(f"Location error: {e}")
-                    return ucapi.SetupError(IntegrationSetupError.OTHER)
                 except Exception as e:
                     _LOG.error(f"Setup failed: {e}")
-                    return ucapi.SetupError(IntegrationSetupError.OTHER)
-
-        return ucapi.RequestUserInput(
-            title={"en": "Weather Location Setup"},
-            settings=[
-                {
-                    "id": "location",
-                    "label": {"en": "Enter Location"},
-                    "field": {
-                        "text": {
-                            "value": "",
-                            "placeholder": "Examples: 10001 or New York, NY"
-                        }
-                    }
-                }
-            ]
-        )
+                    return ucapi.SetupError(str(e))
 
     if isinstance(request, ucapi.UserDataResponse):
+        # This case is unlikely to be used now but is fixed for completeness
         location = request.input_values.get("location", "").strip()
-        use_celsius = request.input_values.get("use_celsius", False)
+        
+        # *** THE FIX: ***
+        # Apply the same robust check here
+        use_celsius_value = request.input_values.get("use_celsius", False)
+        use_celsius = str(use_celsius_value).lower() == 'true'
+
         temperature_unit = "celsius" if use_celsius else "fahrenheit"
         if not location:
-            return ucapi.SetupError(IntegrationSetupError.OTHER)
-
+            return ucapi.SetupError("Location cannot be empty")
+        
         try:
-            _LOG.info(f"Processing location from UserDataResponse: {location}, unit: {temperature_unit}")
-
+            # This logic is now redundant as driver.json handles all setup.
+            # It's kept as a fallback but should ideally not be reached.
             latitude, longitude, location_name = await WeatherClient.geocode_location(location)
-            _LOG.info(f"Geocoded to: {location_name} ({latitude}, {longitude})")
-
-            test_client = WeatherClient(latitude, longitude, temperature_unit)
-            test_data = await test_client.get_current_weather()
-            await test_client.close()
-
-            if not test_data:
-                raise Exception("Unable to fetch weather data for this location")
-
-            _LOG.info(f"Weather test successful: {test_data['temperature']} - {test_data['description']}")
-
             CONFIG.set_location(location, latitude, longitude, location_name, temperature_unit)
             await CONFIG.save()
-
             loop.create_task(on_setup_complete())
-
-            _LOG.info(f"Weather setup completed for {location_name}")
             return ucapi.SetupComplete()
-
-        except ValueError as e:
-            _LOG.error(f"Location error: {e}")
-            return ucapi.SetupError(IntegrationSetupError.OTHER)
         except Exception as e:
-            _LOG.error(f"Setup failed: {e}")
-            return ucapi.SetupError(IntegrationSetupError.OTHER)
+            return ucapi.SetupError(str(e))
 
     if isinstance(request, ucapi.AbortDriverSetup):
         _LOG.info("Setup aborted by user")
@@ -315,20 +229,11 @@ async def handle_setup(request: ucapi.SetupDriver) -> ucapi.SetupAction:
 async def main():
     """Main entry point."""
     global CONFIG
-
     _LOG.info("🚀 Weather Driver starting...")
-    _LOG.info(f"Python path: {sys.path}")
-    _LOG.info(f"Script location: {__file__}")
-
     await CONFIG.load()
-
     driver_path = str(Path(__file__).resolve().parent.parent / "driver.json")
-    _LOG.info(f"Driver path: {driver_path}")
-
     await API.init(driver_path, handle_setup)
-
     _LOG.info("Weather Driver is up and discoverable.")
-
     if CONFIG.is_configured():
         _LOG.info("Complete configuration found, attempting auto-connection...")
         await connect_and_start_weather()
@@ -344,8 +249,6 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         _LOG.info("Driver stopped by user.")
     finally:
-        if UPDATE_TASK:
-            UPDATE_TASK.cancel()
-        if WEATHER_CLIENT:
-            loop.run_until_complete(WEATHER_CLIENT.close())
+        if UPDATE_TASK: UPDATE_TASK.cancel()
+        if WEATHER_CLIENT: loop.run_until_complete(WEATHER_CLIENT.close())
         loop.close()
