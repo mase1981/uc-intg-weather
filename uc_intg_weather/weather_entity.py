@@ -6,7 +6,6 @@ import base64
 from typing import Any, Dict, Optional
 import asyncio
 
-# Import the media_player module directly to access its enums
 from ucapi import media_player
 from ucapi.api_definitions import StatusCodes
 
@@ -22,8 +21,12 @@ async def weather_command_handler(entity, command: str, params: dict[str, Any] |
         if hasattr(entity, 'update_weather'):
             await entity.update_weather()
         return StatusCodes.OK
+    elif command == media_player.Commands.OFF:
+        return StatusCodes.OK
+    elif command == media_player.Commands.PLAY_PAUSE:
+        return StatusCodes.OK
     else:
-        _LOG.warning(f"Received unhandled command, ignoring: {command}")
+        _LOG.warning(f"Received unhandled command, returning NOT_IMPLEMENTED: {command}")
         return StatusCodes.NOT_IMPLEMENTED
 
 
