@@ -101,23 +101,27 @@ class WeatherEntity(media_player.MediaPlayer):
             weather_data = await self.weather_client.get_current_weather()
 
             if weather_data:
+                # MODIFIED: Combine description and temperature in MEDIA_ARTIST
+                # This ensures the weather description is displayed since MEDIA_ALBUM doesn't show
+                combined_info = f"{weather_data['description']} • {weather_data['temperature']}"
+                
                 new_attributes.update({
-                    media_player.Attributes.MEDIA_ARTIST: weather_data["temperature"],
-                    media_player.Attributes.MEDIA_ALBUM: weather_data["description"],
+                    media_player.Attributes.MEDIA_ARTIST: combined_info,
+                    media_player.Attributes.MEDIA_ALBUM: weather_data["description"],  # Keep for potential future use
                     media_player.Attributes.MEDIA_IMAGE_URL: self._get_icon_base64(weather_data["icon"])
                 })
                 _LOG.info(f"Weather updated: {weather_data['temperature']} - {weather_data['description']}")
             else:
                 _LOG.warning("Failed to fetch weather data")
                 new_attributes.update({
-                    media_player.Attributes.MEDIA_ARTIST: "N/A",
+                    media_player.Attributes.MEDIA_ARTIST: "Data unavailable",
                     media_player.Attributes.MEDIA_ALBUM: "Data unavailable",
                 })
 
         except Exception as e:
             _LOG.error(f"Error updating weather: {e}")
             new_attributes.update({
-                media_player.Attributes.MEDIA_ARTIST: "Error",
+                media_player.Attributes.MEDIA_ARTIST: "Update failed",
                 media_player.Attributes.MEDIA_ALBUM: "Update failed",
             })
 
