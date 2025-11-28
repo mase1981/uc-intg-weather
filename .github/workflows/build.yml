@@ -53,7 +53,10 @@ jobs:
             bash -c \
             "cd /workspace && \
               python -m pip install -r requirements.txt && \
-              pyinstaller --clean --onedir --name intg-${{ env.DRIVER_ID }} --collect-all zeroconf uc_intg_weather/driver.py"
+              pyinstaller --clean --onedir --name intg-${{ env.DRIVER_ID }} \
+              --collect-all zeroconf \
+              --add-data uc_intg_${INTG_NAME}/icons:uc_intg_${INTG_NAME}/icons \
+              uc_intg_weather/driver.py"
 
       - name: Prepare artifacts
         shell: bash
@@ -133,8 +136,7 @@ jobs:
           ls -R
           # extract tar.gz build archives from downloaded artifacts
           # (wrapped in tar from actions/upload-artifact, then extracted into a directory by actions/download-artifact)
-          for D in * 
-            do if [ -d "${D}" ]; then
+          for D in * do if [ -d "${D}" ]; then
               mv $D/* ./
             fi
           done;
