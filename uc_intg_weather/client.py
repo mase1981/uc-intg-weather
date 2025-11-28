@@ -14,10 +14,107 @@ _LOG = logging.getLogger(__name__)
 class WeatherClient:
     """Client for fetching weather data from Open-Meteo API."""
 
-    WEATHER_ICONS_DAY = {0:"sun.png",1:"sun-cloud.png",2:"sun-cloud.png",3:"cloud.png",45:"fog.png",48:"fog.png",51:"drizzle.png",53:"drizzle.png",55:"drizzle.png",56:"drizzle.png",57:"drizzle.png",61:"rain.png",63:"rain.png",65:"rain-heavy.png",66:"rain.png",67:"rain-heavy.png",71:"snow.png",73:"snow.png",75:"snow-heavy.png",77:"snow.png",80:"rain.png",81:"rain.png",82:"rain-heavy.png",85:"snow.png",86:"snow-heavy.png",95:"thunderstorm.png",96:"thunderstorm.png",99:"thunderstorm.png"}
-    WEATHER_ICONS_NIGHT = {0:"moon.png",1:"moon-cloud.png",2:"moon-cloud.png",3:"cloud.png",45:"fog.png",48:"fog.png",51:"drizzle.png",53:"drizzle.png",55:"drizzle.png",56:"drizzle.png",57:"drizzle.png",61:"rain.png",63:"rain.png",65:"rain-heavy.png",66:"rain.png",67:"rain-heavy.png",71:"snow.png",73:"snow.png",75:"snow-heavy.png",77:"snow.png",80:"rain.png",81:"rain.png",82:"rain-heavy.png",85:"snow.png",86:"snow-heavy.png",95:"thunderstorm.png",96:"thunderstorm.png",99:"thunderstorm.png"}
-    WEATHER_DESCRIPTIONS = {0:"Clear sky",1:"Mainly clear",2:"Partly cloudy",3:"Overcast",45:"Fog",48:"Depositing rime fog",51:"Light drizzle",53:"Moderate drizzle",55:"Dense drizzle",56:"Light freezing drizzle",57:"Dense freezing drizzle",61:"Slight rain",63:"Moderate rain",65:"Heavy rain",66:"Light freezing rain",67:"Heavy freezing rain",71:"Slight snow",73:"Moderate snow",75:"Heavy snow",77:"Snow grains",80:"Light rain showers",81:"Moderate rain showers",82:"Heavy rain showers",85:"Light snow showers",86:"Heavy snow showers",95:"Thunderstorm",96:"Thunderstorm with hail",99:"Thunderstorm with heavy hail"}
-
+    # Enhanced day icons with comprehensive coverage
+    WEATHER_ICONS_DAY = {
+        0: "sun.png",
+        1: "sun.png",
+        2: "sun-cloud.png",
+        3: "cloud.png",
+        45: "fog.png",
+        48: "fog.png",
+        51: "drizzle.png",
+        53: "drizzle.png",
+        55: "drizzle.png",
+        56: "freezing-rain.png",
+        57: "freezing-rain.png",
+        61: "rain-light.png",
+        63: "rain.png",
+        65: "rain-heavy.png",
+        66: "freezing-rain.png",
+        67: "freezing-rain.png",
+        71: "snow-light.png",
+        73: "snow.png",
+        75: "snow-heavy.png",
+        77: "snow-heavy.png",
+        80: "rain-light.png",
+        81: "rain.png",
+        82: "rain-heavy.png",
+        85: "snow-light.png",
+        86: "snow.png",
+        87: "hail.png",
+        88: "hail.png",
+        95: "thunderstorm.png",
+        96: "thunderstorm.png",
+        99: "thunderstorm.png"
+    }
+    
+    # Enhanced night icons with comprehensive coverage
+    WEATHER_ICONS_NIGHT = {
+        0: "moon.png",
+        1: "moon.png",
+        2: "moon-cloud.png",
+        3: "cloud.png",
+        45: "fog.png",
+        48: "fog.png",
+        51: "drizzle.png",
+        53: "drizzle.png",
+        55: "drizzle.png",
+        56: "freezing-rain.png",
+        57: "freezing-rain.png",
+        61: "rain-light.png",
+        63: "rain.png",
+        65: "rain-heavy.png",
+        66: "freezing-rain.png",
+        67: "freezing-rain.png",
+        71: "snow-light.png",
+        73: "snow.png",
+        75: "snow-heavy.png",
+        77: "snow-heavy.png",
+        80: "rain-light.png",
+        81: "rain.png",
+        82: "rain-heavy.png",
+        85: "snow-light.png",
+        86: "snow.png",
+        87: "hail.png",
+        88: "hail.png",
+        95: "thunderstorm.png",
+        96: "thunderstorm.png",
+        99: "thunderstorm.png"
+    }
+    
+    # Enhanced weather descriptions
+    WEATHER_DESCRIPTIONS = {
+        0: "Clear sky",
+        1: "Mainly clear",
+        2: "Partly cloudy",
+        3: "Overcast",
+        45: "Fog",
+        48: "Depositing rime fog",
+        51: "Light drizzle",
+        53: "Moderate drizzle",
+        55: "Dense drizzle",
+        56: "Light freezing drizzle",
+        57: "Dense freezing drizzle",
+        61: "Slight rain",
+        63: "Moderate rain",
+        65: "Heavy rain",
+        66: "Light freezing rain",
+        67: "Heavy freezing rain",
+        71: "Slight snow",
+        73: "Moderate snow",
+        75: "Heavy snow",
+        77: "Snow grains",
+        80: "Light rain showers",
+        81: "Moderate rain showers",
+        82: "Heavy rain showers",
+        85: "Light snow showers",
+        86: "Heavy snow showers",
+        87: "Slight hail",
+        88: "Heavy hail",
+        95: "Thunderstorm",
+        96: "Thunderstorm with hail",
+        99: "Thunderstorm with heavy hail"
+    }
 
     def __init__(self, latitude: float, longitude: float, temperature_unit: str = "fahrenheit"):
         self.latitude = latitude
@@ -62,6 +159,8 @@ class WeatherClient:
                     current = data.get("current", {})
                     weather_code = current.get("weather_code", 0)
                     is_day = current.get("is_day", 1)
+                    
+                    # Select icon based on day/night with enhanced coverage
                     if is_day == 1:
                         icon = self.WEATHER_ICONS_DAY.get(weather_code, "sun.png")
                     else:
