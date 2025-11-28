@@ -8,6 +8,7 @@ Weather API Client for Unfolded Circle integration.
 import asyncio
 import logging
 import os
+import ssl
 from typing import Optional, Tuple
 
 import aiohttp
@@ -35,6 +36,12 @@ class WeatherClient:
         )
 
     @staticmethod
+    def _create_ssl_context() -> ssl.SSLContext:
+        """Create SSL context with certifi CA bundle."""
+        ssl_context = ssl.create_default_context(cafile=certifi.where())
+        return ssl_context
+
+    @staticmethod
     async def geocode_location(location: str) -> Tuple[float, float, str]:
         url = "https://geocoding-api.open-meteo.com/v1/search"
         params = {
@@ -45,11 +52,12 @@ class WeatherClient:
         }
 
         try:
+            ssl_context = WeatherClient._create_ssl_context()
             timeout = aiohttp.ClientTimeout(total=10)
-            connector = aiohttp.TCPConnector(ssl=certifi.where())
+            connector = aiohttp.TCPConnector(ssl=ssl_context)
             
             async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
-                async with session.get(url, params=params, ssl=certifi.where()) as response:
+                async with session.get(url, params=params) as response:
                     response.raise_for_status()
                     data = await response.json()
 
@@ -92,8 +100,9 @@ class WeatherClient:
     async def _ensure_session(self):
         """Ensure aiohttp session exists."""
         if self._session is None or self._session.closed:
+            ssl_context = self._create_ssl_context()
             timeout = aiohttp.ClientTimeout(total=10)
-            connector = aiohttp.TCPConnector(ssl=certifi.where())
+            connector = aiohttp.TCPConnector(ssl=ssl_context)
             self._session = aiohttp.ClientSession(timeout=timeout, connector=connector)
 
     async def fetch_weather(self) -> dict:
@@ -110,7 +119,7 @@ class WeatherClient:
         try:
             await self._ensure_session()
 
-            async with self._session.get(url, params=params, ssl=certifi.where()) as response:
+            async with self._session.get(url, params=params) as response:
                 response.raise_for_status()
                 data = await response.json()
 
@@ -127,7 +136,7 @@ class WeatherClient:
                 _LOG.info(f"[{self._location}] Retrying weather fetch after WiFi stabilization")
 
                 await self._ensure_session()
-                async with self._session.get(url, params=params, ssl=certifi.where()) as response:
+                async with self._session.get(url, params=params) as response:
                     response.raise_for_status()
                     data = await response.json()
                     return data
