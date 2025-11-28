@@ -1,166 +1,275 @@
-"""Weather API client using Open-Meteo."""
+"""
+Weather API Client for Unfolded Circle integration.
 
-import logging
-import ssl
-from typing import Dict, Optional, Tuple
-import aiohttp
+:copyright: (c) 2025 by Meir Miyara.
+:license: MPL-2.0, see LICENSE for more details.
+"""
+
 import asyncio
-import re
+import logging
+import os
+from typing import Optional
+
+import aiohttp
 import certifi
-from datetime import datetime
 
 _LOG = logging.getLogger(__name__)
+
+ERROR_OS_WAIT = 0.5
+
 
 class WeatherClient:
     """Client for fetching weather data from Open-Meteo API."""
 
-    WEATHER_ICONS_DAY = {0:"sun.png",1:"sun-cloud.png",2:"sun-cloud.png",3:"cloud.png",45:"fog.png",48:"fog.png",51:"drizzle.png",53:"drizzle.png",55:"drizzle.png",56:"drizzle.png",57:"drizzle.png",61:"rain.png",63:"rain.png",65:"rain-heavy.png",66:"rain.png",67:"rain-heavy.png",71:"snow.png",73:"snow.png",75:"snow-heavy.png",77:"snow.png",80:"rain.png",81:"rain.png",82:"rain-heavy.png",85:"snow.png",86:"snow-heavy.png",95:"thunderstorm.png",96:"thunderstorm.png",99:"thunderstorm.png"}
-    WEATHER_ICONS_NIGHT = {0:"moon.png",1:"moon-cloud.png",2:"moon-cloud.png",3:"cloud.png",45:"fog.png",48:"fog.png",51:"drizzle.png",53:"drizzle.png",55:"drizzle.png",56:"drizzle.png",57:"drizzle.png",61:"rain.png",63:"rain.png",65:"rain-heavy.png",66:"rain.png",67:"rain-heavy.png",71:"snow.png",73:"snow.png",75:"snow-heavy.png",77:"snow.png",80:"rain.png",81:"rain.png",82:"rain-heavy.png",85:"snow.png",86:"snow-heavy.png",95:"thunderstorm.png",96:"thunderstorm.png",99:"thunderstorm.png"}
-    WEATHER_DESCRIPTIONS = {0:"Clear sky",1:"Mainly clear",2:"Partly cloudy",3:"Overcast",45:"Fog",48:"Depositing rime fog",51:"Light drizzle",53:"Moderate drizzle",55:"Dense drizzle",56:"Light freezing drizzle",57:"Dense freezing drizzle",61:"Slight rain",63:"Moderate rain",65:"Heavy rain",66:"Light freezing rain",67:"Heavy freezing rain",71:"Slight snow",73:"Moderate snow",75:"Heavy snow",77:"Snow grains",80:"Light rain showers",81:"Moderate rain showers",82:"Heavy rain showers",85:"Light snow showers",86:"Heavy snow showers",95:"Thunderstorm",96:"Thunderstorm with hail",99:"Thunderstorm with heavy hail"}
+    def __init__(self, latitude: float, longitude: float, location: str, use_celsius: bool = False):
+        """
+        Initialize weather client.
 
+        Args:
+            latitude: Location latitude
+            longitude: Location longitude
+            location: Location name/description
+            use_celsius: Use Celsius instead of Fahrenheit
+        """
+        self._latitude = latitude
+        self._longitude = longitude
+        self._location = location
+        self._use_celsius = use_celsius
+        self._session: Optional[aiohttp.ClientSession] = None
+        self._icon_cache_dir = os.path.join(os.path.dirname(__file__), "..", "cache")
+        os.makedirs(self._icon_cache_dir, exist_ok=True)
+        _LOG.info(
+            f"Weather client initialized for {location} ({latitude}, {longitude}), "
+            f"temp unit: {'Celsius' if use_celsius else 'Fahrenheit'}"
+        )
 
-    def __init__(self, latitude: float, longitude: float, temperature_unit: str = "fahrenheit"):
-        self.latitude = latitude
-        self.longitude = longitude
-        self.temperature_unit = temperature_unit
-        self.ssl_context = ssl.create_default_context(cafile=certifi.where())
-        self.session: aiohttp.ClientSession | None = None
+    async def _ensure_session(self):
+        """Ensure aiohttp session exists."""
+        if self._session is None or self._session.closed:
+            timeout = aiohttp.ClientTimeout(total=10)
+            connector = aiohttp.TCPConnector(ssl=certifi.where())
+            self._session = aiohttp.ClientSession(timeout=timeout, connector=connector)
 
-    async def _get_session(self) -> aiohttp.ClientSession:
-        """Get or create HTTP session, ensuring SSL context is used."""
-        if self.session is None or self.session.closed:
-            timeout = aiohttp.ClientTimeout(total=30)
-            connector = aiohttp.TCPConnector(ssl=self.ssl_context)
-            self.session = aiohttp.ClientSession(timeout=timeout, connector=connector)
-        return self.session
+    async def fetch_weather(self) -> dict:
+        """
+        Fetch current weather data from Open-Meteo API.
+
+        Returns:
+            Dictionary containing weather data including temperature, weather_code, and is_day
+
+        Raises:
+            Exception: If API request fails
+        """
+        url = "https://api.open-meteo.com/v1/forecast"
+
+        params = {
+            "latitude": self._latitude,
+            "longitude": self._longitude,
+            "current": ["temperature_2m", "weather_code", "is_day"],
+            "temperature_unit": "fahrenheit" if not self._use_celsius else "celsius",
+            "timezone": "auto"
+        }
+
+        try:
+            await self._ensure_session()
+
+            async with self._session.get(url, params=params, ssl=certifi.where()) as response:
+                response.raise_for_status()
+                data = await response.json()
+
+                _LOG.debug(f"Received weather data for {self._location}: {data}")
+                return data
+
+        except aiohttp.ClientOSError as ex:
+            _LOG.warning(
+                f"[{self._location}] OS error detected (WiFi not ready), waiting {ERROR_OS_WAIT}s before retry"
+            )
+
+            try:
+                await asyncio.sleep(ERROR_OS_WAIT)
+                _LOG.info(f"[{self._location}] Retrying weather fetch after WiFi stabilization")
+
+                await self._ensure_session()
+                async with self._session.get(url, params=params, ssl=certifi.where()) as response:
+                    response.raise_for_status()
+                    data = await response.json()
+                    return data
+
+            except Exception as retry_ex:
+                _LOG.error(
+                    f"[{self._location}] Weather fetch failed even after WiFi wait period: {retry_ex}"
+                )
+                raise
+
+        except aiohttp.ClientError as ex:
+            _LOG.error(f"Failed to fetch weather data for {self._location}: {ex}")
+            raise
+        except asyncio.TimeoutError:
+            _LOG.error(f"Weather API request timed out for {self._location}")
+            raise
+        except Exception as ex:
+            _LOG.error(f"Unexpected error fetching weather for {self._location}: {ex}")
+            raise
+
+    def get_weather_description(self, weather_code: int) -> str:
+        """
+        Get human-readable weather description from WMO code.
+
+        Args:
+            weather_code: WMO weather code (0-99)
+
+        Returns:
+            Human-readable weather description
+        """
+        descriptions = {
+            0: "Clear sky",
+            1: "Mainly clear",
+            2: "Partly cloudy",
+            3: "Overcast",
+            45: "Fog",
+            48: "Depositing rime fog",
+            51: "Light drizzle",
+            53: "Moderate drizzle",
+            55: "Dense drizzle",
+            56: "Light freezing drizzle",
+            57: "Dense freezing drizzle",
+            61: "Slight rain",
+            63: "Moderate rain",
+            65: "Heavy rain",
+            66: "Light freezing rain",
+            67: "Heavy freezing rain",
+            71: "Slight snow",
+            73: "Moderate snow",
+            75: "Heavy snow",
+            77: "Snow grains",
+            80: "Slight rain showers",
+            81: "Moderate rain showers",
+            82: "Violent rain showers",
+            85: "Slight snow showers",
+            86: "Heavy snow showers",
+            87: "Slight hail",
+            88: "Heavy hail",
+            95: "Thunderstorm",
+            96: "Thunderstorm with slight hail",
+            99: "Thunderstorm with heavy hail"
+        }
+
+        return descriptions.get(weather_code, f"Unknown condition (code {weather_code})")
+
+    def _get_weather_icon_url(self, weather_code: int, is_day: int = 1) -> str:
+        """
+        Get the appropriate weather icon URL based on WMO code and time of day.
+
+        Args:
+            weather_code: WMO weather code (0-99)
+            is_day: Day/night indicator (1 = day, 0 = night)
+
+        Returns:
+            URL string to the weather icon file
+        """
+
+        # Clear sky conditions (0-1) - Day/Night variants
+        if weather_code in [0, 1]:
+            icon_name = "sun.png" if is_day else "moon.png"
+
+        # Partly cloudy (2) - Day/Night variants
+        elif weather_code == 2:
+            icon_name = "sun-cloud.png" if is_day else "moon-cloud.png"
+
+        # Overcast (3)
+        elif weather_code == 3:
+            icon_name = "cloud.png"
+
+        # Fog (45, 48)
+        elif weather_code in [45, 48]:
+            icon_name = "fog.png"
+
+        # Drizzle (51, 53, 55) - regular drizzle
+        elif weather_code in [51, 53, 55]:
+            icon_name = "drizzle.png"
+
+        # Freezing drizzle (56, 57)
+        elif weather_code in [56, 57]:
+            icon_name = "freezing-rain.png"
+
+        # Light rain (61, 80)
+        elif weather_code in [61, 80]:
+            icon_name = "rain-light.png"
+
+        # Moderate rain (63, 81)
+        elif weather_code in [63, 81]:
+            icon_name = "rain.png"
+
+        # Heavy rain (65, 82)
+        elif weather_code in [65, 82]:
+            icon_name = "rain-heavy.png"
+
+        # Freezing rain (66, 67)
+        elif weather_code in [66, 67]:
+            icon_name = "freezing-rain.png"
+
+        # Light snow (71, 85)
+        elif weather_code in [71, 85]:
+            icon_name = "snow-light.png"
+
+        # Moderate snow (73, 86)
+        elif weather_code in [73, 86]:
+            icon_name = "snow.png"
+
+        # Heavy snow (75, 77)
+        elif weather_code in [75, 77]:
+            icon_name = "snow-heavy.png"
+
+        # Hail (87, 88)
+        elif weather_code in [87, 88]:
+            icon_name = "hail.png"
+
+        # Thunderstorm (95, 96, 99)
+        elif weather_code in [95, 96, 99]:
+            icon_name = "thunderstorm.png"
+
+        # Default fallback for any unmapped codes
+        else:
+            _LOG.warning(f"Unknown weather code {weather_code}, using default cloud icon")
+            icon_name = "cloud.png"
+
+        return self._get_icon_path(icon_name)
+
+    def _get_icon_path(self, icon_name: str) -> str:
+        """
+        Get file path for weather icon.
+
+        Args:
+            icon_name: Icon filename (e.g., 'sun.png')
+
+        Returns:
+            File URL path to icon
+        """
+        icon_path = os.path.join(self._icon_cache_dir, icon_name)
+
+        if not os.path.exists(icon_path):
+            _LOG.warning(f"Weather icon not found: {icon_path}, using default")
+            icon_path = os.path.join(self._icon_cache_dir, "cloud.png")
+
+        file_url = f"file://{icon_path}"
+        _LOG.debug(f"Icon URL for {icon_name}: {file_url}")
+        return file_url
+
+    def format_temperature(self, temp: float) -> str:
+        """
+        Format temperature value with appropriate unit.
+
+        Args:
+            temp: Temperature value
+
+        Returns:
+            Formatted temperature string
+        """
+        unit = "°C" if self._use_celsius else "°F"
+        return f"{temp:.1f}{unit}"
 
     async def close(self):
-        """Close HTTP session."""
-        if self.session and not self.session.closed:
-            await self.session.close()
-
-    async def get_current_weather(self) -> Optional[Dict]:
-        """Fetch current weather data."""
-        try:
-            session = await self._get_session()
-
-            url = "https://api.open-meteo.com/v1/forecast"
-            params = {
-                "latitude": self.latitude,
-                "longitude": self.longitude,
-                "current": "temperature_2m,weather_code,relative_humidity_2m,wind_speed_10m,is_day",
-                "temperature_unit": self.temperature_unit,
-                "wind_speed_unit": "mph",
-                "timezone": "auto"
-            }
-
-            _LOG.debug(f"Fetching weather from {url} with params: {params}")
-
-            async with session.get(url, params=params) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    current = data.get("current", {})
-                    weather_code = current.get("weather_code", 0)
-                    is_day = current.get("is_day", 1)
-                    if is_day == 1:
-                        icon = self.WEATHER_ICONS_DAY.get(weather_code, "sun.png")
-                    else:
-                        icon = self.WEATHER_ICONS_NIGHT.get(weather_code, "moon.png")
-                    
-                    # Use appropriate unit symbol
-                    unit_symbol = "°F" if self.temperature_unit == "fahrenheit" else "°C"
-                    
-                    result = {
-                        "temperature": f"{current.get('temperature_2m', 0):.1f}{unit_symbol}",
-                        "description": self.WEATHER_DESCRIPTIONS.get(weather_code, "Unknown"),
-                        "icon": icon,
-                        "humidity": f"{current.get('relative_humidity_2m', 0)}%",
-                        "wind_speed": f"{current.get('wind_speed_10m', 0)} mph",
-                        "weather_code": weather_code,
-                        "is_day": is_day
-                    }
-                    _LOG.info(f"Weather data received: {result['temperature']} - {result['description']} ({'Day' if is_day else 'Night'})")
-                    return result
-                else:
-                    _LOG.error(f"Weather API returned status {response.status}")
-                    text = await response.text()
-                    _LOG.error(f"Response: {text}")
-                    return None
-
-        except asyncio.TimeoutError:
-            _LOG.error("Weather API request timed out")
-            return None
-        except Exception as e:
-            _LOG.error(f"Failed to fetch weather data: {type(e).__name__}: {e}")
-            return None
-
-    @staticmethod
-    async def geocode_location(location: str) -> Tuple[float, float, str]:
-        """Geocode a location string to coordinates."""
-        try:
-            location = location.strip()
-            _LOG.info(f"Geocoding location: '{location}'")
-            
-            # Updated pattern to support international postal codes (2-10 alphanumeric chars with spaces/hyphens)
-            postal_pattern = re.compile(r'^[A-Z0-9\s-]{2,10}$', re.IGNORECASE)
-            search_query = location
-
-            if postal_pattern.match(location):
-                _LOG.info(f"Detected postal/ZIP code: {search_query}")
-
-            url = "https://geocoding-api.open-meteo.com/v1/search"
-            params = {"name": search_query, "count": 5, "language": "en", "format": "json"}
-            
-            ssl_context = ssl.create_default_context(cafile=certifi.where())
-            connector = aiohttp.TCPConnector(ssl=ssl_context)
-            timeout = aiohttp.ClientTimeout(total=30)
-
-            async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
-                _LOG.debug(f"Geocoding request to {url} with params: {params}")
-
-                async with session.get(url, params=params) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        results = data.get("results", [])
-
-                        if not results:
-                            raise ValueError(f"Location '{location}' not found")
-
-                        # For postal codes, prefer results in the user's likely country
-                        # but don't filter out non-US results
-                        if postal_pattern.match(location):
-                            # Check if it looks like a US ZIP (5 digits)
-                            if re.match(r'^\d{5}(-\d{4})?$', location):
-                                us_results = [r for r in results if r.get("country") == "United States"]
-                                if us_results:
-                                    results = us_results
-                        
-                        result = results[0]
-                        latitude = result.get("latitude")
-                        longitude = result.get("longitude")
-                        name = result.get("name", "")
-                        country = result.get("country", "")
-                        admin1 = result.get("admin1", "")  # State/Province
-
-                        if country == "United States" and admin1:
-                            location_name = f"{name}, {admin1}"
-                        elif country:
-                            location_name = f"{name}, {country}"
-                        else:
-                            location_name = name
-
-                        _LOG.info(f"Geocoded to: {location_name} ({latitude}, {longitude})")
-                        return latitude, longitude, location_name
-                    else:
-                        text = await response.text()
-                        raise ValueError(f"Geocoding API returned status {response.status}: {text}")
-
-        except aiohttp.ClientError as e:
-            _LOG.error(f"Network error during geocoding: {e}")
-            raise ValueError(f"Network error: Unable to connect to geocoding service")
-        except asyncio.TimeoutError:
-            _LOG.error("Geocoding request timed out")
-            raise ValueError("Request timed out: Unable to geocode location")
-        except Exception as e:
-            _LOG.error(f"Failed to geocode location '{location}': {e}")
-            raise ValueError(f"Failed to find location: {str(e)}")
+        """Close the aiohttp session."""
+        if self._session and not self._session.closed:
+            await self._session.close()
+            _LOG.debug("Weather client session closed")

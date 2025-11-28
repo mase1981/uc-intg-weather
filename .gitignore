@@ -33,10 +33,6 @@ MANIFEST
 *.manifest
 *.spec
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
 # Unit test / coverage reports
 htmlcov/
 .tox/
@@ -50,9 +46,8 @@ coverage.xml
 *.py,cover
 .hypothesis/
 .pytest_cache/
-cover/
 
-# Environments
+# Virtual environments
 .env
 .venv
 env/
@@ -60,13 +55,34 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+/tools
+# Spyder project settings
+.spyderproject
+.spyproject
 
-# IDE files
+# Rope project settings
+.ropeproject
+
+# PyCharm
 .idea/
-.vscode/
 
-# Local Files
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Configuration files (contain sensitive data)
 config.json
-config/
-test*
-kill*
+*.log
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Integration specific
+artifacts/
