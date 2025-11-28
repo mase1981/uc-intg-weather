@@ -8,7 +8,7 @@ Weather API Client for Unfolded Circle integration.
 import asyncio
 import logging
 import os
-from typing import Optional
+from typing import Optional, Tuple
 
 import aiohttp
 import certifi
@@ -22,15 +22,6 @@ class WeatherClient:
     """Client for fetching weather data from Open-Meteo API."""
 
     def __init__(self, latitude: float, longitude: float, location: str, use_celsius: bool = False):
-        """
-        Initialize weather client.
-
-        Args:
-            latitude: Location latitude
-            longitude: Location longitude
-            location: Location name/description
-            use_celsius: Use Celsius instead of Fahrenheit
-        """
         self._latitude = latitude
         self._longitude = longitude
         self._location = location
@@ -43,6 +34,61 @@ class WeatherClient:
             f"temp unit: {'Celsius' if use_celsius else 'Fahrenheit'}"
         )
 
+    @staticmethod
+    async def geocode_location(location: str) -> Tuple[float, float, str]:
+        url = "https://geocoding-api.open-meteo.com/v1/search"
+        params = {
+            "name": location,
+            "count": 1,
+            "language": "en",
+            "format": "json"
+        }
+
+        try:
+            timeout = aiohttp.ClientTimeout(total=10)
+            connector = aiohttp.TCPConnector(ssl=certifi.where())
+            
+            async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
+                async with session.get(url, params=params, ssl=certifi.where()) as response:
+                    response.raise_for_status()
+                    data = await response.json()
+
+                    if not data.get("results"):
+                        _LOG.error(f"Location not found: {location}")
+                        raise ValueError(f"Location '{location}' not found. Please verify spelling or try a different format.")
+
+                    result = data["results"][0]
+                    latitude = result["latitude"]
+                    longitude = result["longitude"]
+                    
+                    # Build formatted location name
+                    name_parts = [result["name"]]
+                    if "admin1" in result and result["admin1"]:
+                        name_parts.append(result["admin1"])
+                    if "country" in result and result["country"]:
+                        name_parts.append(result["country"])
+                    
+                    formatted_name = ", ".join(name_parts)
+
+                    _LOG.info(
+                        f"Geocoded '{location}' to: {formatted_name} "
+                        f"({latitude}, {longitude})"
+                    )
+
+                    return latitude, longitude, formatted_name
+
+        except aiohttp.ClientError as ex:
+            _LOG.error(f"Failed to geocode location '{location}': {ex}")
+            raise Exception(f"Network error while geocoding location: {ex}")
+        except asyncio.TimeoutError:
+            _LOG.error(f"Geocoding request timed out for location: {location}")
+            raise Exception("Geocoding request timed out. Please try again.")
+        except ValueError:
+            raise
+        except Exception as ex:
+            _LOG.error(f"Unexpected error geocoding location '{location}': {ex}")
+            raise Exception(f"Failed to geocode location: {ex}")
+
     async def _ensure_session(self):
         """Ensure aiohttp session exists."""
         if self._session is None or self._session.closed:
@@ -51,15 +97,6 @@ class WeatherClient:
             self._session = aiohttp.ClientSession(timeout=timeout, connector=connector)
 
     async def fetch_weather(self) -> dict:
-        """
-        Fetch current weather data from Open-Meteo API.
-
-        Returns:
-            Dictionary containing weather data including temperature, weather_code, and is_day
-
-        Raises:
-            Exception: If API request fails
-        """
         url = "https://api.open-meteo.com/v1/forecast"
 
         params = {
@@ -112,15 +149,6 @@ class WeatherClient:
             raise
 
     def get_weather_description(self, weather_code: int) -> str:
-        """
-        Get human-readable weather description from WMO code.
-
-        Args:
-            weather_code: WMO weather code (0-99)
-
-        Returns:
-            Human-readable weather description
-        """
         descriptions = {
             0: "Clear sky",
             1: "Mainly clear",
@@ -157,17 +185,6 @@ class WeatherClient:
         return descriptions.get(weather_code, f"Unknown condition (code {weather_code})")
 
     def _get_weather_icon_url(self, weather_code: int, is_day: int = 1) -> str:
-        """
-        Get the appropriate weather icon URL based on WMO code and time of day.
-
-        Args:
-            weather_code: WMO weather code (0-99)
-            is_day: Day/night indicator (1 = day, 0 = night)
-
-        Returns:
-            URL string to the weather icon file
-        """
-
         # Clear sky conditions (0-1) - Day/Night variants
         if weather_code in [0, 1]:
             icon_name = "sun.png" if is_day else "moon.png"
@@ -236,15 +253,6 @@ class WeatherClient:
         return self._get_icon_path(icon_name)
 
     def _get_icon_path(self, icon_name: str) -> str:
-        """
-        Get file path for weather icon.
-
-        Args:
-            icon_name: Icon filename (e.g., 'sun.png')
-
-        Returns:
-            File URL path to icon
-        """
         icon_path = os.path.join(self._icon_cache_dir, icon_name)
 
         if not os.path.exists(icon_path):
@@ -256,15 +264,6 @@ class WeatherClient:
         return file_url
 
     def format_temperature(self, temp: float) -> str:
-        """
-        Format temperature value with appropriate unit.
-
-        Args:
-            temp: Temperature value
-
-        Returns:
-            Formatted temperature string
-        """
         unit = "°C" if self._use_celsius else "°F"
         return f"{temp:.1f}{unit}"
 
