@@ -200,21 +200,11 @@ class WeatherClient:
             location = location.strip()
             _LOG.info(f"Geocoding location: '{location}'")
             
-            # Canadian postal code pattern (e.g., K0A1V0 or K0A 1V0)
-            canadian_postal_pattern = re.compile(r'^([A-Z]\d[A-Z])\s?(\d[A-Z]\d)$', re.IGNORECASE)
-            
-            # General postal code pattern (2-10 alphanumeric)
+            # Updated pattern to support international postal codes (2-10 alphanumeric chars with spaces/hyphens)
             postal_pattern = re.compile(r'^[A-Z0-9\s-]{2,10}$', re.IGNORECASE)
-            
             search_query = location
-            
-            # Handle Canadian postal codes - ensure proper spacing
-            canadian_match = canadian_postal_pattern.match(location)
-            if canadian_match:
-                # Format as "K0A 1V0" with space
-                search_query = f"{canadian_match.group(1)} {canadian_match.group(2)}"
-                _LOG.info(f"Detected Canadian postal code, formatted as: {search_query}")
-            elif postal_pattern.match(location):
+
+            if postal_pattern.match(location):
                 _LOG.info(f"Detected postal/ZIP code: {search_query}")
 
             url = "https://geocoding-api.open-meteo.com/v1/search"
@@ -231,13 +221,6 @@ class WeatherClient:
                     if response.status == 200:
                         data = await response.json()
                         results = data.get("results", [])
-                        
-                        # CRITICAL: Log the full API response for debugging
-                        _LOG.info(f"Geocoding API response: {len(results) if results else 0} results returned")
-                        if results:
-                            _LOG.debug(f"First 3 results: {results[:3]}")
-                        else:
-                            _LOG.warning(f"API returned empty results for '{search_query}'. Full response: {data}")
 
                         if not results:
                             raise ValueError(f"Location '{location}' not found")
@@ -269,7 +252,6 @@ class WeatherClient:
                         return latitude, longitude, location_name
                     else:
                         text = await response.text()
-                        _LOG.error(f"Geocoding API returned status {response.status}: {text}")
                         raise ValueError(f"Geocoding API returned status {response.status}: {text}")
 
         except aiohttp.ClientError as e:
