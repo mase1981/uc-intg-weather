@@ -100,17 +100,21 @@ The integration is available as a pre-built Docker image from GitHub Container R
 
 **Docker Compose:**
 ```yaml
+version: '3.8'
 services:
-  uc-intg-weather:
+  weather-integration:
     image: ghcr.io/mase1981/uc-intg-weather:latest
     container_name: uc-intg-weather
+    restart: unless-stopped
     network_mode: host
     volumes:
-      - </local/path>:/data
+      - ./data:/data
     environment:
       - UC_CONFIG_HOME=/data
+      - UC_INTEGRATION_INTERFACE=0.0.0.0
       - UC_INTEGRATION_HTTP_PORT=9090
-    restart: unless-stopped
+      - UC_DISABLE_MDNS_PUBLISH=false
+      - PYTHONPATH=/app
 ```
 
 **Docker Run:**
