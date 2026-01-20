@@ -5,6 +5,7 @@ import os
 import base64
 from typing import Any, Dict, Optional
 import asyncio
+from datetime import datetime
 
 from ucapi import media_player
 from ucapi.api_definitions import StatusCodes
@@ -60,6 +61,7 @@ class WeatherEntity(media_player.MediaPlayer):
         self._weather_data = None
         self._api = api
         self._icon_cache = {}
+        self._current_time = ""
 
     def _get_icon_base64(self, icon_filename: str) -> str:
         """Get the base64 encoded icon data."""
@@ -93,36 +95,53 @@ class WeatherEntity(media_player.MediaPlayer):
             _LOG.error(f"Failed to read icon {icon_path}: {e}")
             return ""
 
+    def update_time(self) -> None:
+        """Update current time display."""
+        self._current_time = datetime.now().strftime("%I:%M %p")
+        self._update_display()
+
     async def update_weather(self) -> None:
         """Update weather data from API."""
-        new_attributes = self.attributes.copy()
         try:
             _LOG.debug("Updating weather data...")
             weather_data = await self.weather_client.get_current_weather()
 
             if weather_data:
-                # MODIFIED: Combine description and temperature in MEDIA_ARTIST
-                # This ensures the weather description is displayed since MEDIA_ALBUM doesn't show
-                combined_info = f"{weather_data['description']} • {weather_data['temperature']}"
-                
+                self._weather_data = weather_data
+                _LOG.info(f"Weather updated: {weather_data['temperature']} - {weather_data['description']}")
+
+                new_attributes = self.attributes.copy()
                 new_attributes.update({
-                    media_player.Attributes.MEDIA_ARTIST: combined_info,
-                    media_player.Attributes.MEDIA_ALBUM: weather_data["description"],  # Keep for potential future use
                     media_player.Attributes.MEDIA_IMAGE_URL: self._get_icon_base64(weather_data["icon"])
                 })
-                _LOG.info(f"Weather updated: {weather_data['temperature']} - {weather_data['description']}")
+                self.attributes.update(new_attributes)
             else:
                 _LOG.warning("Failed to fetch weather data")
-                new_attributes.update({
-                    media_player.Attributes.MEDIA_ARTIST: "Data unavailable",
-                    media_player.Attributes.MEDIA_ALBUM: "Data unavailable",
-                })
+                self._weather_data = None
 
         except Exception as e:
             _LOG.error(f"Error updating weather: {e}")
+            self._weather_data = None
+
+        self._update_display()
+
+    def _update_display(self) -> None:
+        """Update the display with current time and weather."""
+        new_attributes = self.attributes.copy()
+
+        if self._weather_data:
+            # Combine time, description, and temperature in MEDIA_ARTIST
+            combined_info = f"{self._current_time} • {self._weather_data['description']} • {self._weather_data['temperature']}"
             new_attributes.update({
-                media_player.Attributes.MEDIA_ARTIST: "Update failed",
-                media_player.Attributes.MEDIA_ALBUM: "Update failed",
+                media_player.Attributes.MEDIA_ARTIST: combined_info,
+                media_player.Attributes.MEDIA_ALBUM: self._weather_data["description"],
+            })
+        else:
+            # Show time even if weather data is unavailable
+            combined_info = f"{self._current_time} • Weather unavailable"
+            new_attributes.update({
+                media_player.Attributes.MEDIA_ARTIST: combined_info,
+                media_player.Attributes.MEDIA_ALBUM: "Data unavailable",
             })
 
         self.attributes.update(new_attributes)
