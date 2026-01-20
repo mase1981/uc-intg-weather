@@ -41,6 +41,7 @@ API = ucapi.IntegrationAPI(loop)
 CONFIG = WeatherConfig()
 WEATHER_ENTITY: WeatherEntity | None = None
 UPDATE_TASK: asyncio.Task | None = None
+CLOCK_TASK: asyncio.Task | None = None
 WEATHER_CLIENT: WeatherClient | None = None
 
 
@@ -82,6 +83,14 @@ def start_weather_updates():
     UPDATE_TASK = loop.create_task(weather_update_loop())
 
 
+def start_clock_updates():
+    """Start the clock update task that runs every minute."""
+    global CLOCK_TASK
+    if CLOCK_TASK and not CLOCK_TASK.done(): return
+    _LOG.info("Starting clock update loop...")
+    CLOCK_TASK = loop.create_task(clock_update_loop())
+
+
 async def weather_update_loop():
     """Periodic weather update loop with smart intervals."""
     while True:
@@ -96,6 +105,21 @@ async def weather_update_loop():
         except Exception as e:
             _LOG.error(f"Error in weather update loop: {e}")
             await asyncio.sleep(300)
+
+
+async def clock_update_loop():
+    """Clock update loop that runs every minute."""
+    while True:
+        try:
+            if WEATHER_ENTITY:
+                WEATHER_ENTITY.update_time()
+                _LOG.debug("Clock updated")
+            await asyncio.sleep(60)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            _LOG.error(f"Error in clock update loop: {e}")
+            await asyncio.sleep(60)
 
 
 async def on_setup_complete():
@@ -142,10 +166,12 @@ async def on_disconnect() -> None:
 
 @API.listens_to(Events.ENTER_STANDBY)
 async def on_enter_standby() -> None:
-    global UPDATE_TASK
+    global UPDATE_TASK, CLOCK_TASK
     _LOG.info("Remote entered standby - pausing updates")
     if UPDATE_TASK and not UPDATE_TASK.done():
         UPDATE_TASK.cancel()
+    if CLOCK_TASK and not CLOCK_TASK.done():
+        CLOCK_TASK.cancel()
 
 
 @API.listens_to(Events.EXIT_STANDBY)
@@ -154,6 +180,7 @@ async def on_exit_standby() -> None:
     if WEATHER_ENTITY:
         await WEATHER_ENTITY.update_weather()
         start_weather_updates()
+        start_clock_updates()
 
 
 @API.listens_to(Events.SUBSCRIBE_ENTITIES)
@@ -162,6 +189,7 @@ async def on_subscribe_entities(entity_ids: list[str]) -> None:
         _LOG.info("UI subscribed to our entity. Moving to configured list and starting updates.")
         API.configured_entities.add(WEATHER_ENTITY)
         start_weather_updates()
+        start_clock_updates()
 
 
 async def handle_setup(request: ucapi.SetupDriver) -> ucapi.SetupAction:
@@ -250,5 +278,6 @@ if __name__ == "__main__":
         _LOG.info("Driver stopped by user.")
     finally:
         if UPDATE_TASK: UPDATE_TASK.cancel()
+        if CLOCK_TASK: CLOCK_TASK.cancel()
         if WEATHER_CLIENT: loop.run_until_complete(WEATHER_CLIENT.close())
         loop.close()
