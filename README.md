@@ -1,6 +1,6 @@
 # Weather Display Integration for Unfolded Circle Remote 2/3
 
-Display real-time weather conditions with beautiful, contextual icons directly on your Unfolded Circle Remote 2 or Remote 3 screen. Features **day/night icon variants**, **comprehensive weather coverage**, and **automatic hourly updates** powered by the free Open-Meteo API.
+Display real-time weather conditions with a **live clock**, beautiful contextual icons directly on your Unfolded Circle Remote 2 or Remote 3 screen. Features **real-time clock display**, **day/night icon variants**, **comprehensive weather coverage**, and **automatic updates** powered by the free Open-Meteo API.
 
 ![Weather](https://img.shields.io/badge/Weather-Display-orange)
 [![GitHub Release](https://img.shields.io/github/v/release/mase1981/uc-intg-weather?style=flat-square)](https://github.com/mase1981/uc-intg-weather/releases)
@@ -13,9 +13,26 @@ Display real-time weather conditions with beautiful, contextual icons directly o
 [![PayPal](https://img.shields.io/badge/PayPal-donate-blue.svg?style=flat-square)](https://paypal.me/mmiyara)
 [![Github Sponsors](https://img.shields.io/badge/GitHub%20Sponsors-30363D?&logo=GitHub-Sponsors&logoColor=EA4AAA&style=flat-square)](https://github.com/sponsors/mase1981)
 
+## 🆕 What's New in v2.1.0
+
+### Live Clock Feature
+The integration now includes a **real-time clock** that updates every minute alongside your weather information!
+
+**Display Format:** `HH:MM AM/PM • Weather • Temperature`
+**Example:** `02:30 PM • Clear sky • 72.5°F`
+
+**Key Benefits:**
+- ⏰ Always know the current time at a glance
+- 🔋 Zero battery impact (uses local system time)
+- 🌐 Works offline, no API calls needed
+- 🔄 Updates independently every 60 seconds
+- 😴 Smart standby handling (pauses/resumes automatically)
+
+---
+
 ## Features
 
-This integration displays current weather conditions on your Unfolded Circle Remote using the free Open-Meteo API. Weather information is presented as a media player entity with beautiful, modern 3D-styled icons that automatically adapt to day and night conditions.
+This integration displays current weather conditions with a live clock on your Unfolded Circle Remote using the free Open-Meteo API. Weather information is presented as a media player entity with beautiful, modern 3D-styled icons that automatically adapt to day and night conditions.
 
 ---
 ## ❤️ Support Development
@@ -31,12 +48,20 @@ Your support helps maintain this integration. Thank you! ❤️
 
 ### 🌤️ **Weather Display Features**
 
+#### **🕐 Live Clock Display (NEW in v2.1.0)**
+- **Real-Time Clock** - Updates every minute with current time
+- **12-Hour Format** - Displays time as HH:MM AM/PM
+- **Zero Battery Impact** - Uses local system time, no API calls
+- **Always Visible** - Shows even when weather data unavailable
+- **Smart Display** - Time • Weather • Temperature format
+- **Standby Aware** - Pauses during standby, resumes on wake
+
 #### **Real-Time Weather Information**
 - **Current Temperature** - Fahrenheit or Celsius display
 - **Weather Description** - Human-readable conditions
 - **Location Display** - Shows configured location name
 - **Weather Icons** - Beautiful 3D-styled icons with day/night variants
-- **Automatic Updates** - Refreshes every hour
+- **Smart Updates** - Battery-efficient update intervals (30min-4hr based on time of day)
 
 #### **Comprehensive Weather Coverage**
 16 weather condition icons covering:
@@ -172,13 +197,20 @@ docker run -d --name uc-weather --restart unless-stopped --network host -v weath
 
 ### Weather Display Entity
 
-The integration creates a single media player entity that displays weather information:
+The integration creates a single media player entity that displays weather information with live clock:
 
 **Entity Display:**
 - **Media Title**: Location name (e.g., "New York, NY")
-- **Media Artist**: Current temperature (e.g., "72.5°F")
+- **Media Artist**: Time + Weather + Temperature (e.g., "02:30 PM • Partly cloudy • 72.5°F")
 - **Media Album**: Weather description (e.g., "Partly cloudy")
 - **Media Image**: Weather-appropriate icon
+
+**Clock Feature:**
+- Updates every 60 seconds independently
+- No impact on weather update schedule
+- Works offline (uses local system time)
+- Pauses during remote standby
+- Resumes automatically on wake
 
 **Entity States:**
 - **Playing**: Weather data available and current
@@ -240,7 +272,16 @@ The integration supports all standard WMO (World Meteorological Organization) we
 
 ### Update Frequency
 
-- **Automatic**: Updates every hour
+**Clock Updates:**
+- **Real-Time**: Updates every 60 seconds
+- **Independent**: Runs separately from weather updates
+- **Battery Efficient**: No API calls, uses local time only
+
+**Weather Updates:**
+- **Smart Intervals**: Battery-efficient scheduling based on time of day
+  - Night (11PM-6AM): Every 4 hours
+  - Peak times (6-9AM, 5-8PM): Every 30 minutes
+  - Regular hours: Every hour
 - **On Demand**: Remote power on/wake triggers immediate update
 - **Manual**: Restart integration to force update
 - **Reliable**: Automatic retry on API failures
@@ -342,8 +383,8 @@ uc-intg-weather/
 │   ├── __init__.py            # Package info with dynamic version
 │   ├── client.py              # Open-Meteo API client
 │   ├── config.py              # Configuration management
-│   ├── driver.py              # Main integration driver
-│   ├── weather_entity.py      # Weather media player entity
+│   ├── driver.py              # Main integration driver (clock + weather loops)
+│   ├── weather_entity.py      # Weather media player entity (with clock display)
 │   ├── setup.py               # Setup flow handler
 │   └── icons/                 # Weather icon assets
 │       ├── sun.png            # Day clear icon
@@ -372,6 +413,7 @@ uc-intg-weather/
 ├── driver.json                # Integration metadata
 ├── requirements.txt           # Dependencies
 ├── pyproject.toml             # Python project config
+├── test_clock.py              # Clock feature test suite
 └── README.md                  # This file
 ```
 
