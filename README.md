@@ -72,6 +72,7 @@ Your support helps maintain this integration. Thank you! ❤️
 - **ZIP/Postal Codes** - US and international postal codes
 - **City, State Format** - "New York, NY" or "Los Angeles, CA"
 - **International Cities** - "London, UK" or "Paris, France"
+- **Direct Coordinates** - Latitude/Longitude input (e.g., 51.5074, -0.1278)
 - **Automatic Geocoding** - Converts location to coordinates
 - **Timezone Detection** - Automatically determines local timezone
 
@@ -140,6 +141,8 @@ docker run -d --name uc-weather --restart unless-stopped --network host -v weath
 
 **Location Format Options:**
 
+**Option A: Location String (Automatic Geocoding)**
+
 **US ZIP Code:**
 - Format: `12345` or `12345-6789`
 - Example: `10001` (New York City)
@@ -155,6 +158,24 @@ docker run -d --name uc-weather --restart unless-stopped --network host -v weath
 - Example: `London, UK`
 - Example: `Paris, France`
 - Example: `Tokyo, Japan`
+
+**Option B: Direct Coordinates (Advanced)**
+
+For precise location control, you can enter coordinates directly:
+
+**Latitude/Longitude:**
+- Leave "Location" field empty
+- Enter **Latitude**: `-90` to `90` (positive = North, negative = South)
+- Enter **Longitude**: `-180` to `180` (positive = East, negative = West)
+- Example: Latitude `51.5074`, Longitude `-0.1278` (London)
+- Example: Latitude `40.7128`, Longitude `-74.0060` (New York)
+- Optional: Enter a display name for your location
+
+**Why use coordinates?**
+- Exact location precision (useful for rural areas)
+- Works with Open-Meteo API URL format
+- No ambiguity in location lookup
+- Ideal for locations with non-standard names
 
 ### Step 3: Choose Temperature Unit
 

@@ -197,24 +197,63 @@ async def handle_setup(request: ucapi.SetupDriver) -> ucapi.SetupAction:
     _LOG.info(f"Handling setup request: {type(request).__name__}")
 
     if isinstance(request, ucapi.DriverSetupRequest):
-        if request.setup_data and "location" in request.setup_data:
+        if request.setup_data:
             location = request.setup_data.get("location", "").strip()
-            
-            # *** THE FIX: ***
+            lat_str = request.setup_data.get("latitude", "").strip()
+            lon_str = request.setup_data.get("longitude", "").strip()
+            display_name = request.setup_data.get("location_name", "").strip()
+
             # Check the value correctly, handling both boolean False and string "false"
             use_celsius_value = request.setup_data.get("use_celsius", False)
             use_celsius = str(use_celsius_value).lower() == 'true'
-
             temperature_unit = "celsius" if use_celsius else "fahrenheit"
-            if location:
+
+            # Priority 1: Use latitude/longitude if provided
+            if lat_str and lon_str:
+                _LOG.info(f"Processing direct lat/lon: {lat_str}, {lon_str}, unit: {temperature_unit}")
+                try:
+                    latitude = float(lat_str)
+                    longitude = float(lon_str)
+
+                    # Validate coordinate ranges
+                    if not (-90 <= latitude <= 90):
+                        raise ValueError("Latitude must be between -90 and 90")
+                    if not (-180 <= longitude <= 180):
+                        raise ValueError("Longitude must be between -180 and 180")
+
+                    # Test the coordinates with API
+                    test_client = WeatherClient(latitude, longitude, temperature_unit)
+                    test_data = await test_client.get_current_weather()
+                    await test_client.close()
+                    if not test_data:
+                        raise Exception("Unable to fetch weather data for these coordinates")
+
+                    # Use display name or generate default
+                    location_name = display_name if display_name else f"Location ({latitude}, {longitude})"
+                    location_input = f"{latitude},{longitude}"
+
+                    CONFIG.set_location(location_input, latitude, longitude, location_name, temperature_unit)
+                    await CONFIG.save()
+                    loop.create_task(on_setup_complete())
+                    return ucapi.SetupComplete()
+                except ValueError as e:
+                    _LOG.error(f"Invalid coordinates: {e}")
+                    return ucapi.SetupError(f"Invalid coordinates: {str(e)}")
+                except Exception as e:
+                    _LOG.error(f"Setup failed with coordinates: {e}")
+                    return ucapi.SetupError(str(e))
+
+            # Priority 2: Use location string if no lat/lon provided
+            elif location:
                 _LOG.info(f"Processing location from setup_data: {location}, unit: {temperature_unit}")
                 try:
                     latitude, longitude, location_name = await WeatherClient.geocode_location(location)
                     test_client = WeatherClient(latitude, longitude, temperature_unit)
                     test_data = await test_client.get_current_weather()
                     await test_client.close()
-                    if not test_data: raise Exception("Unable to fetch weather data for this location")
-                    
+                    if not test_data:
+                        raise Exception("Unable to fetch weather data for this location")
+
                     CONFIG.set_location(location, latitude, longitude, location_name, temperature_unit)
                     await CONFIG.save()
                     loop.create_task(on_setup_complete())
@@ -222,30 +261,64 @@ async def handle_setup(request: ucapi.SetupDriver) -> ucapi.SetupAction:
                 except Exception as e:
                     _LOG.error(f"Setup failed: {e}")
                     return ucapi.SetupError(str(e))
+            else:
+                return ucapi.SetupError("Please provide either a location or latitude/longitude coordinates")
 
     if isinstance(request, ucapi.UserDataResponse):
         # This case is unlikely to be used now but is fixed for completeness
         location = request.input_values.get("location", "").strip()
-        
-        # *** THE FIX: ***
+        lat_str = request.input_values.get("latitude", "").strip()
+        lon_str = request.input_values.get("longitude", "").strip()
+        display_name = request.input_values.get("location_name", "").strip()
+
         # Apply the same robust check here
         use_celsius_value = request.input_values.get("use_celsius", False)
         use_celsius = str(use_celsius_value).lower() == 'true'
-
         temperature_unit = "celsius" if use_celsius else "fahrenheit"
-        if not location:
-            return ucapi.SetupError("Location cannot be empty")
-        
-        try:
-            # This logic is now redundant as driver.json handles all setup.
-            # It's kept as a fallback but should ideally not be reached.
-            latitude, longitude, location_name = await WeatherClient.geocode_location(location)
-            CONFIG.set_location(location, latitude, longitude, location_name, temperature_unit)
-            await CONFIG.save()
-            loop.create_task(on_setup_complete())
-            return ucapi.SetupComplete()
-        except Exception as e:
-            return ucapi.SetupError(str(e))
+
+        # Priority 1: Use latitude/longitude if provided
+        if lat_str and lon_str:
+            try:
+                latitude = float(lat_str)
+                longitude = float(lon_str)
+
+                # Validate coordinate ranges
+                if not (-90 <= latitude <= 90):
+                    raise ValueError("Latitude must be between -90 and 90")
+                if not (-180 <= longitude <= 180):
+                    raise ValueError("Longitude must be between -180 and 180")
+
+                # Test the coordinates
+                test_client = WeatherClient(latitude, longitude, temperature_unit)
+                test_data = await test_client.get_current_weather()
+                await test_client.close()
+                if not test_data:
+                    raise Exception("Unable to fetch weather data for these coordinates")
+
+                location_name = display_name if display_name else f"Location ({latitude}, {longitude})"
+                location_input = f"{latitude},{longitude}"
+
+                CONFIG.set_location(location_input, latitude, longitude, location_name, temperature_unit)
+                await CONFIG.save()
+                loop.create_task(on_setup_complete())
+                return ucapi.SetupComplete()
+            except ValueError as e:
+                return ucapi.SetupError(f"Invalid coordinates: {str(e)}")
+            except Exception as e:
+                return ucapi.SetupError(str(e))
+
+        # Priority 2: Use location string
+        elif location:
+            try:
+                latitude, longitude, location_name = await WeatherClient.geocode_location(location)
+                CONFIG.set_location(location, latitude, longitude, location_name, temperature_unit)
+                await CONFIG.save()
+                loop.create_task(on_setup_complete())
+                return ucapi.SetupComplete()
+            except Exception as e:
+                return ucapi.SetupError(str(e))
+        else:
+            return ucapi.SetupError("Please provide either a location or latitude/longitude coordinates")
 
     if isinstance(request, ucapi.AbortDriverSetup):
         _LOG.info("Setup aborted by user")

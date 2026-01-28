@@ -86,3 +86,7 @@ Thumbs.db
 
 # Integration specific
 artifacts/
+
+# Testing files (keep local only, never push to repository)
+test_*.py
+IMPLEMENTATION_SUMMARY.md

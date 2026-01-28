@@ -1,6 +1,6 @@
 {
   "driver_id": "weather_display",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "min_core_api": "0.18.0",
   "name": {
     "en": "Weather Display",
@@ -32,6 +32,45 @@
           "en": "Location (ZIP/Postal code or City, State/Country)",
           "de": "Standort (PLZ oder Stadt, Bundesland/Land)",
           "fr": "Emplacement (Code postal ou Ville, État/Pays)"
+        },
+        "field": {
+          "text": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "id": "latitude",
+        "label": {
+          "en": "Latitude (optional, if not using Location above)",
+          "de": "Breitengrad (optional, wenn oben kein Standort angegeben)",
+          "fr": "Latitude (optionnel, si aucun emplacement ci-dessus)"
+        },
+        "field": {
+          "text": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "id": "longitude",
+        "label": {
+          "en": "Longitude (optional, if not using Location above)",
+          "de": "Längengrad (optional, wenn oben kein Standort angegeben)",
+          "fr": "Longitude (optionnel, si aucun emplacement ci-dessus)"
+        },
+        "field": {
+          "text": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "id": "location_name",
+        "label": {
+          "en": "Display Name (optional, for lat/lon)",
+          "de": "Anzeigename (optional, für Lat/Lon)",
+          "fr": "Nom d'affichage (optionnel, pour lat/lon)"
         },
         "field": {
           "text": {
