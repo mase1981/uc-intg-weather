@@ -19,8 +19,10 @@ do
     driver_version=$(get_driver_version)
     pyproject_version=$(get_pyproject_version)
 
-    # Check consistency between files
-    if [[ "$driver_version" != "$pyproject_version" ]]; then
+    # Check consistency between files. pyproject.toml uses a dynamic version
+    # (attr = "uc_intg_weather.__version__"), which reads from driver.json, so
+    # only enforce the match when pyproject exposes a literal semver.
+    if [[ "$pyproject_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]] && [[ "$driver_version" != "$pyproject_version" ]]; then
       echo "❌ driver.json ($driver_version) and pyproject.toml ($pyproject_version) have different versions."
       exit 1
     fi

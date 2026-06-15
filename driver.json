@@ -1,7 +1,7 @@
 {
   "driver_id": "weather_display",
-  "version": "2.2.0",
-  "min_core_api": "0.18.0",
+  "version": "3.0.0",
+  "min_core_api": "0.22.0",
   "name": {
     "en": "Weather Display",
     "de": "Wetter Anzeige",
@@ -14,7 +14,7 @@
   },
   "developer": {
     "name": "Meir Miyara",
-    "email": "meir.miyara@example.com",
+    "email": "meir.miyara@gmail.com",
     "url": "https://github.com/mase1981"
   },
   "home_page": "https://github.com/mase1981/uc-intg-weather",
@@ -27,67 +27,19 @@
     },
     "settings": [
       {
-        "id": "location",
+        "id": "info",
         "label": {
-          "en": "Location (ZIP/Postal code or City, State/Country)",
-          "de": "Standort (PLZ oder Stadt, Bundesland/Land)",
-          "fr": "Emplacement (Code postal ou Ville, État/Pays)"
+          "en": "Setup information",
+          "de": "Einrichtungsinformationen",
+          "fr": "Informations de configuration"
         },
         "field": {
-          "text": {
-            "value": ""
-          }
-        }
-      },
-      {
-        "id": "latitude",
-        "label": {
-          "en": "Latitude (optional, if not using Location above)",
-          "de": "Breitengrad (optional, wenn oben kein Standort angegeben)",
-          "fr": "Latitude (optionnel, si aucun emplacement ci-dessus)"
-        },
-        "field": {
-          "text": {
-            "value": ""
-          }
-        }
-      },
-      {
-        "id": "longitude",
-        "label": {
-          "en": "Longitude (optional, if not using Location above)",
-          "de": "Längengrad (optional, wenn oben kein Standort angegeben)",
-          "fr": "Longitude (optionnel, si aucun emplacement ci-dessus)"
-        },
-        "field": {
-          "text": {
-            "value": ""
-          }
-        }
-      },
-      {
-        "id": "location_name",
-        "label": {
-          "en": "Display Name (optional, for lat/lon)",
-          "de": "Anzeigename (optional, für Lat/Lon)",
-          "fr": "Nom d'affichage (optionnel, pour lat/lon)"
-        },
-        "field": {
-          "text": {
-            "value": ""
-          }
-        }
-      },
-      {
-        "id": "use_celsius",
-        "label": {
-          "en": "Use Celsius (°C) instead of Fahrenheit (°F)",
-          "de": "Celsius (°C) statt Fahrenheit (°F) verwenden",
-          "fr": "Utiliser Celsius (°C) au lieu de Fahrenheit (°F)"
-        },
-        "field": {
-          "checkbox": {
-            "value": false
+          "label": {
+            "value": {
+              "en": "On the next screen, enter a location (ZIP/postal code or City, State/Country) or latitude/longitude coordinates, and choose your temperature unit.",
+              "de": "Geben Sie auf dem nächsten Bildschirm einen Standort (PLZ oder Stadt, Bundesland/Land) oder Koordinaten ein und wählen Sie Ihre Temperatureinheit.",
+              "fr": "Sur l'écran suivant, saisissez un emplacement (code postal ou ville, état/pays) ou des coordonnées, et choisissez votre unité de température."
+            }
           }
         }
       }

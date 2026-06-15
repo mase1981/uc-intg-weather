@@ -33,12 +33,12 @@ Your support helps maintain this integration. Thank you! ❤️
 ### 🌤️ **Weather Display Features**
 
 #### **Live Clock Display**
-- **Real-Time Clock** - Updates every minute with current time
+- **Real-Time Clock** - Updates every minute with current time, **only while the tile is on screen**
 - **12-Hour Format** - Displays time as HH:MM AM/PM
-- **Zero Battery Impact** - Uses local system time, no API calls
+- **No API Calls** - Uses local system time for the clock
 - **Always Visible** - Shows even when weather data unavailable
 - **Smart Display** - Time + Weather + Temperature format
-- **Standby Aware** - Pauses during standby, resumes on wake
+- **Battery Aware** - Stops when the tile is not displayed and during standby; resumes automatically
 
 #### **Real-Time Weather Information**
 - **Current Temperature** - Fahrenheit or Celsius display
@@ -208,15 +208,14 @@ The integration creates a single media player entity that displays weather infor
 - **Media Image**: Weather-appropriate icon
 
 **Clock Feature:**
-- Updates every 60 seconds independently
-- No impact on weather update schedule
-- Works offline (uses local system time)
-- Pauses during remote standby
-- Resumes automatically on wake
+- Updates every 60 seconds while the tile is displayed
+- Uses local system time (no API calls for the clock)
+- Stops when the tile is not on screen and during remote standby
+- Resumes automatically when displayed again or on wake
 
 **Entity States:**
-- **Playing**: Weather data available and current
-- **Unavailable**: Integration or API connection issue
+- **On**: Weather data available and current
+- **Unavailable**: Tile not displayed, in standby, or API connection issue
 
 ### Weather Icon Reference
 
@@ -241,9 +240,13 @@ The integration creates a single media player entity that displays weather infor
 
 ### Update Frequency
 
+**Display lifecycle (battery):**
+- Both the clock and weather updates run **only while the weather tile is on screen**
+- When you navigate away, stop the activity, or the Remote enters standby, all updates **stop**
+- Everything resumes automatically when the tile is displayed again or the Remote wakes
+
 **Clock Updates:**
-- **Real-Time**: Updates every 60 seconds
-- **Independent**: Runs separately from weather updates
+- **Real-Time**: Updates every 60 seconds while displayed
 - **Battery Efficient**: No API calls, uses local time only
 
 **Weather Updates:**
@@ -251,8 +254,8 @@ The integration creates a single media player entity that displays weather infor
   - Night (11PM-6AM): Every 4 hours
   - Peak times (6-9AM, 5-8PM): Every 30 minutes
   - Regular hours: Every hour
-- **On Demand**: Remote power on/wake triggers immediate update
-- **Reliable**: Automatic retry on API failures
+- **On Demand**: Power on (ON command) triggers an immediate refresh
+- **Reliable**: Stays available and shows "Weather unavailable" on transient API errors
 
 ## Credits
 
