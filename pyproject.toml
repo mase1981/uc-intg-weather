@@ -29,10 +29,10 @@ classifiers = [
 ]
 
 dependencies = [
-    "ucapi>=0.4.0",
-    "aiohttp>=3.8.0",
-    "certifi",
-    "aiofiles"
+    "ucapi-framework>=1.9.5",
+    "ucapi>=0.7.0",
+    "aiohttp>=3.9.0",
+    "certifi>=2024.0.0"
 ]
 dynamic = ["version"]
 
@@ -56,4 +56,4 @@ version = {attr = "uc_intg_weather.__version__"}
 "uc_intg_weather" = ["*.json", "icons/*.png"]
 
 [project.scripts]
-uc-intg-weather = "uc_intg_weather.driver:main"
+uc-intg-weather = "uc_intg_weather:main"

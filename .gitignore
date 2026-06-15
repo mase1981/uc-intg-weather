@@ -89,4 +89,11 @@ artifacts/
 
 # Testing files (keep local only, never push to repository)
 test_*.py
+tests/
+simulator/
 IMPLEMENTATION_SUMMARY.md
+
+# Claude (local only)
+.claude/
+knowledge-base/
+*.knowledge.md

@@ -1,5 +1,8 @@
 #!/bin/bash
+set -e
 
-cd /usr/src/app
-pip install --no-cache-dir -q -r requirements.txt
-python uc_intg_weather/driver.py
+cd /app
+if [ -f requirements.txt ]; then
+    pip install --no-cache-dir -q -r requirements.txt
+fi
+python3 -u -m uc_intg_weather
