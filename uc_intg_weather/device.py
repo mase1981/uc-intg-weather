@@ -13,7 +13,7 @@ view or the Remote enters standby.
 import asyncio
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from ucapi_framework import PollingDevice
@@ -96,6 +96,135 @@ class WeatherDevice(PollingDevice):
     def time_str(self) -> str:
         return self._time_str
 
+    def hourly_forecast(self, hours_ahead: int) -> dict | None:
+        """Return an hourly forecast slot relative to the next forecast hour."""
+        if not self._weather_data or hours_ahead < 1:
+            return None
+
+        hourly = self._weather_data.get("hourly", {})
+        times = hourly.get("time", [])
+
+        if not times:
+            return None
+
+        utc_offset_seconds = self._weather_data.get(
+            "utc_offset_seconds",
+            0,
+        )
+
+        location_now = (
+            datetime.now(timezone.utc)
+            + timedelta(seconds=utc_offset_seconds)
+        ).replace(tzinfo=None)
+
+        future_indexes = [
+            index
+            for index, time_value in enumerate(times)
+            if datetime.fromisoformat(time_value) > location_now
+        ]
+
+        forecast_position = hours_ahead - 1
+
+        if forecast_position >= len(future_indexes):
+            return None
+
+        index = future_indexes[forecast_position]
+        forecast_time = datetime.fromisoformat(times[index])
+
+        def hourly_value(
+            field: str,
+            default: Any,
+        ) -> Any:
+            values = hourly.get(field, [])
+
+            if not isinstance(values, list) or index >= len(values):
+                return default
+
+            value = values[index]
+            return default if value is None else value
+
+        weather_code = hourly_value("weather_code", 0)
+        is_day = hourly_value("is_day", 1)
+
+        icon_map = (
+            WeatherClient.WEATHER_ICONS_DAY
+            if is_day
+            else WeatherClient.WEATHER_ICONS_NIGHT
+        )
+
+        return {
+            "time": forecast_time,
+            "temperature": hourly_value("temperature_2m", 0.0),
+            "weather_code": weather_code,
+            "description": WeatherClient.WEATHER_DESCRIPTIONS.get(
+                weather_code,
+                "Unknown",
+            ),
+            "icon": icon_map.get(weather_code, "cloud.png"),
+            "precipitation_probability": hourly_value(
+                "precipitation_probability",
+                0,
+            ),
+            "is_day": is_day,
+        }
+
+    @property
+    def current_hour_forecast(self) -> dict | None:
+        """Return the hourly forecast slot containing the current time."""
+        if not self._weather_data:
+            return None
+
+        hourly = self._weather_data.get("hourly", {})
+        times = hourly.get("time", [])
+
+        if not times:
+            return None
+
+        utc_offset_seconds = self._weather_data.get(
+            "utc_offset_seconds",
+            0,
+        )
+
+        location_now = (
+            datetime.now(timezone.utc)
+            + timedelta(seconds=utc_offset_seconds)
+        ).replace(tzinfo=None)
+
+        current_hour = location_now.replace(
+            minute=0,
+            second=0,
+            microsecond=0,
+        )
+
+        try:
+            index = next(
+                index
+                for index, time_value in enumerate(times)
+                if datetime.fromisoformat(time_value) == current_hour
+            )
+        except StopIteration:
+            return None
+
+        def hourly_value(
+            field: str,
+            default: Any,
+        ) -> Any:
+            values = hourly.get(field, [])
+
+            if not isinstance(values, list) or index >= len(values):
+                return default
+
+            value = values[index]
+            return default if value is None else value
+
+        return {
+            "weather_code": hourly_value("weather_code", 0),
+            "precipitation_probability": hourly_value(
+                "precipitation_probability",
+                0,
+            ),
+        }
+
     # ------------------------------------------------------------------
     # Connection lifecycle
     # ------------------------------------------------------------------
@@ -123,8 +252,8 @@ class WeatherDevice(PollingDevice):
                 self._device_config.longitude,
                 self._device_config.temperature_unit,
             )
-        self._state = "ON"
 
+        self._state = "ON"
         self._time_str = datetime.now().strftime("%I:%M %p")
         await self._fetch_weather()
 
@@ -142,6 +271,7 @@ class WeatherDevice(PollingDevice):
         async with self._connect_lock:
             if self._client is not None:
                 await self._client.close()
+
         self._state = "UNAVAILABLE"
         await super().disconnect()
 
@@ -160,35 +290,45 @@ class WeatherDevice(PollingDevice):
     def _is_weather_due(self) -> bool:
         if self._weather_data is None or self._last_fetch is None:
             return True
+
         elapsed = time.monotonic() - self._last_fetch
         return elapsed >= self._smart_interval()
 
     @staticmethod
     def _smart_interval() -> int:
         hour = datetime.now().hour
+
         if hour >= 23 or hour < 6:
             return _INTERVAL_NIGHT
+
         if 6 <= hour < 9 or 17 <= hour < 20:
             return _INTERVAL_PEAK
+
         return _INTERVAL_DAY
 
     async def _fetch_weather(self) -> None:
         if self._client is None:
             return
+
         try:
             data = await self._client.get_current_weather()
+
             if data:
                 self._weather_data = data
                 self._last_fetch = time.monotonic()
+
                 _LOG.info(
                     "[%s] Weather updated: %s - %s",
                     self.log_id,
                     data.get("temperature"),
                     data.get("description"),
                 )
+
             else:
                 _LOG.warning("[%s] Weather fetch returned no data", self.log_id)
                 self._weather_data = None
+
         except Exception as err:  # pylint: disable=broad-exception-caught
             _LOG.warning("[%s] Weather fetch failed: %s", self.log_id, err)
             self._weather_data = None
+            

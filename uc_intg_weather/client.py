@@ -146,6 +146,7 @@ class WeatherClient:
                 "latitude": self.latitude,
                 "longitude": self.longitude,
                 "current": "temperature_2m,weather_code,relative_humidity_2m,wind_speed_10m,is_day",
+                "hourly": "temperature_2m,weather_code,precipitation_probability,is_day",
                 "temperature_unit": self.temperature_unit,
                 "wind_speed_unit": "mph",
                 "timezone": "auto"
@@ -176,7 +177,9 @@ class WeatherClient:
                         "humidity": f"{current.get('relative_humidity_2m', 0)}%",
                         "wind_speed": f"{current.get('wind_speed_10m', 0)} mph",
                         "weather_code": weather_code,
-                        "is_day": is_day
+                        "is_day": is_day,
+                        "utc_offset_seconds": data.get("utc_offset_seconds", 0),
+                        "hourly": data.get("hourly", {}),
                     }
                     _LOG.info(f"Weather data received: {result['temperature']} - {result['description']} ({'Day' if is_day else 'Night'})")
                     return result

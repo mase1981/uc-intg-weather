@@ -11,7 +11,10 @@ from ucapi_framework import BaseIntegrationDriver
 
 from uc_intg_weather.config import WeatherConfig
 from uc_intg_weather.device import WeatherDevice
-from uc_intg_weather.media_player import WeatherMediaPlayer
+from uc_intg_weather.media_player import (
+    WeatherMediaPlayer,
+    create_weather_forecast_entities,
+)
 
 _LOG = logging.getLogger(__name__)
 
@@ -22,6 +25,9 @@ class WeatherDriver(BaseIntegrationDriver[WeatherDevice, WeatherConfig]):
     def __init__(self):
         super().__init__(
             device_class=WeatherDevice,
-            entity_classes=[WeatherMediaPlayer],
+            entity_classes=[
+                WeatherMediaPlayer,
+                create_weather_forecast_entities,
+            ],
             driver_id="weather_display",
         )
