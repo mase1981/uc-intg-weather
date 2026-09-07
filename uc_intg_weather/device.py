@@ -331,4 +331,3 @@ class WeatherDevice(PollingDevice):
         except Exception as err:  # pylint: disable=broad-exception-caught
             _LOG.warning("[%s] Weather fetch failed: %s", self.log_id, err)
             self._weather_data = None
-            

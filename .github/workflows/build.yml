@@ -14,7 +14,7 @@ env:
 jobs:
   build:
     name: Build Release
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
     outputs:
       version: ${{ steps.get-version-and-id.outputs.VERSION }}
       driver_id: ${{ steps.get-version-and-id.outputs.DRIVER_ID }}
@@ -36,8 +36,6 @@ jobs:
 
       - name: Build
         run: |
-          sudo apt-get update && sudo apt-get install -y qemu-system-arm binfmt-support qemu-user-static
-          docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
           echo "Starting pyinstaller build"
           docker run --rm --name builder \
             --platform=aarch64 \

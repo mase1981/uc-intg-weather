@@ -41,8 +41,8 @@ def _precipitation_label(weather_code: int) -> str:
     if weather_code in (71, 73, 75, 77, 85, 86):
         return "Snow"
 
-    # Thunderstorms with hail
-    if weather_code in (96, 99):
+    # Hail and thunderstorms with hail
+    if weather_code in (87, 88, 96, 99):
         return "Hail"
 
     # Thunderstorm without hail
