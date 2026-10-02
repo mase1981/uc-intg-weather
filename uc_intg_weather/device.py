@@ -19,7 +19,12 @@ from typing import Any
 from ucapi_framework import PollingDevice
 
 from uc_intg_weather.client import WeatherClient
-from uc_intg_weather.config import WeatherConfig
+from uc_intg_weather.config import (
+    TEMPERATURE_UNITS,
+    WIND_UNITS,
+    WeatherConfig,
+    resolve_wind_unit,
+)
 
 _LOG = logging.getLogger(__name__)
 
@@ -213,6 +218,10 @@ class WeatherDevice(PollingDevice):
                 return values[index]
         return None
 
+    def daily_value(self, field: str, day: datetime) -> Any:
+        """Return one Open-Meteo daily value for the given local day."""
+        return self._daily_value(field, day)
+
     def high_low(self) -> tuple[float, float] | None:
         """Return today's (max, min) temperature at the location."""
         now = self.location_now()
@@ -262,7 +271,41 @@ class WeatherDevice(PollingDevice):
 
     @property
     def wind_unit_label(self) -> str:
-        return "mph" if self._device_config.temperature_unit == "fahrenheit" else "km/h"
+        return WIND_UNITS[self.wind_unit]
+
+    @property
+    def wind_unit(self) -> str:
+        """Open-Meteo wind unit in use ("mph", "kmh", "ms" or "kn")."""
+        return resolve_wind_unit(
+            self._device_config.temperature_unit, self._device_config.wind_unit
+        )
+
+    @property
+    def temperature_unit(self) -> str:
+        return self._device_config.temperature_unit
+
+    @property
+    def temperature_symbol(self) -> str:
+        return TEMPERATURE_UNITS.get(self._device_config.temperature_unit, "°F")
+
+    async def set_units(
+        self, temperature_unit: str | None = None, wind_unit: str | None = None
+    ) -> None:
+        """Change display units, persist them and refresh the weather immediately."""
+        changes: dict[str, str] = {}
+        if temperature_unit in TEMPERATURE_UNITS and temperature_unit != self.temperature_unit:
+            changes["temperature_unit"] = temperature_unit
+        if wind_unit in WIND_UNITS and wind_unit != self._device_config.wind_unit:
+            changes["wind_unit"] = wind_unit
+        if not changes:
+            return
+
+        self.update_config(**changes)
+        if self._client is not None:
+            self._client.temperature_unit = self._device_config.temperature_unit
+            self._client.wind_unit_setting = self._device_config.wind_unit
+        _LOG.info("[%s] Units changed: %s", self.log_id, changes)
+        await self.refresh_weather()
 
     def is_twilight(self, when: datetime) -> bool:
         """True within 40 minutes after sunset or before sunrise (blue hour)."""
@@ -403,6 +446,7 @@ class WeatherDevice(PollingDevice):
                 self._device_config.latitude,
                 self._device_config.longitude,
                 self._device_config.temperature_unit,
+                self._device_config.wind_unit,
             )
 
         self._state = "ON"

@@ -16,6 +16,8 @@ from uc_intg_weather.media_player import (
     create_weather_daily_entities,
     create_weather_forecast_entities,
 )
+from uc_intg_weather.select import create_weather_unit_selects
+from uc_intg_weather.sensor import create_weather_sensors
 
 _LOG = logging.getLogger(__name__)
 
@@ -30,6 +32,8 @@ class WeatherDriver(BaseIntegrationDriver[WeatherDevice, WeatherConfig]):
                 WeatherMediaPlayer,
                 create_weather_forecast_entities,
                 create_weather_daily_entities,
+                create_weather_sensors,
+                create_weather_unit_selects,
             ],
             driver_id="weather_display",
         )

@@ -56,7 +56,8 @@ def _wind_strength(speed: Any, gusts: Any, unit_label: str) -> float:
         value = max(float(speed or 0), 0.7 * float(gusts or 0))
     except (TypeError, ValueError):
         return 0.0
-    mph = value if unit_label == "mph" else value / 1.609
+    to_mph = {"mph": 1.0, "km/h": 1 / 1.609, "m/s": 2.237, "kn": 1.151}
+    mph = value * to_mph.get(unit_label, 1.0)
     return round(min(1.0, max(0.0, (mph - 12) / 25)) * 4) / 4
 
 
@@ -315,11 +316,6 @@ class WeatherForecastMediaPlayer(WeatherMediaPlayer):
         self._scene_key: Any = None
         self._scene_url: str = ""
         self._hours_ahead = hours_ahead
-        self._temperature_unit_symbol = (
-            "°F"
-            if device_config.temperature_unit == "fahrenheit"
-            else "°C"
-        )
 
         entity_id = (
             f"media_player.{device_config.identifier}."
@@ -381,7 +377,7 @@ class WeatherForecastMediaPlayer(WeatherMediaPlayer):
             )
 
             attributes[media_player.Attributes.MEDIA_ARTIST] = (
-                f"{temperature:.1f}{self._temperature_unit_symbol} "
+                f"{temperature:.1f}{self._device.temperature_symbol} "
                 f"• {precipitation_label} "
                 f"{forecast['precipitation_probability']}%"
             )
@@ -457,9 +453,6 @@ class WeatherDailyMediaPlayer(WeatherMediaPlayer):
         self._scene_key: Any = None
         self._scene_url: str = ""
         self._days_ahead = days_ahead
-        self._temperature_unit_symbol = (
-            "°F" if device_config.temperature_unit == "fahrenheit" else "°C"
-        )
 
         entity_name = "Weather Tomorrow" if days_ahead == 1 else f"Weather +{days_ahead} days"
 
@@ -499,7 +492,7 @@ class WeatherDailyMediaPlayer(WeatherMediaPlayer):
             day_label = "Tomorrow" if self._days_ahead == 1 else date.strftime("%A")
             date_label = f"{date.strftime('%a, %b')} {date.day}"
             precipitation_label = _precipitation_label(forecast["weather_code"])
-            unit = self._temperature_unit_symbol
+            unit = self._device.temperature_symbol
 
             attributes[media_player.Attributes.MEDIA_TITLE] = (
                 f"{date_label} • {forecast['description']}"

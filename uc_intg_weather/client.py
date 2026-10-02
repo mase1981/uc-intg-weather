@@ -9,6 +9,8 @@ import re
 import certifi
 from datetime import datetime
 
+from uc_intg_weather.config import WIND_UNITS, resolve_wind_unit
+
 _LOG = logging.getLogger(__name__)
 
 class WeatherClient:
@@ -116,21 +118,28 @@ class WeatherClient:
         99: "Thunderstorm with heavy hail"
     }
 
-    def __init__(self, latitude: float, longitude: float, temperature_unit: str = "fahrenheit"):
+    def __init__(
+        self,
+        latitude: float,
+        longitude: float,
+        temperature_unit: str = "fahrenheit",
+        wind_unit: str = "",
+    ):
         self.latitude = latitude
         self.longitude = longitude
         self.temperature_unit = temperature_unit
+        self.wind_unit_setting = wind_unit
         self.ssl_context = ssl.create_default_context(cafile=certifi.where())
         self.session: aiohttp.ClientSession | None = None
 
     @property
     def wind_unit(self) -> str:
-        """Open-Meteo wind unit matching the chosen temperature unit."""
-        return "mph" if self.temperature_unit == "fahrenheit" else "kmh"
+        """Open-Meteo wind unit (configured, or derived from the temperature unit)."""
+        return resolve_wind_unit(self.temperature_unit, self.wind_unit_setting)
 
     @property
     def wind_unit_label(self) -> str:
-        return "mph" if self.temperature_unit == "fahrenheit" else "km/h"
+        return WIND_UNITS[self.wind_unit]
 
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create HTTP session, ensuring SSL context is used."""

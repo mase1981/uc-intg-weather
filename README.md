@@ -55,6 +55,15 @@ Your support helps maintain this integration. Thank you! ❤️
 - **Per Day** - Conditions scene, high/low, rain chance, sunrise/sunset and UV index
 - **Optional** - Add only the tiles you want; existing entities are unchanged
 
+#### **Weather Sensors**
+- **Current Conditions** - Temperature, feels like, humidity, conditions, wind speed, gusts and direction, UV index, rain chance, sunrise and sunset
+- **Use Anywhere** - Place them on Remote pages or use them in activities
+
+#### **Unit Selects**
+- **Temperature Unit** - Switch between °C and °F from the Remote
+- **Wind Unit** - Switch between mph, km/h, m/s and knots from the Remote
+- **Saved** - The choice is stored and applied to every tile and sensor immediately
+
 #### **Real-Time Weather Information**
 - **Current Temperature** - Fahrenheit or Celsius display
 - **Weather Description** - Human-readable conditions
@@ -81,6 +90,7 @@ Your support helps maintain this integration. Thank you! ❤️
 - **Fahrenheit (°F)** - Default temperature unit
 - **Celsius (°C)** - Optional metric display
 - **Decimal Precision** - Shows one decimal place for accuracy
+- **Wind Speed Unit** - mph, km/h, m/s or knots, chosen independently of the temperature unit (e.g. °C with mph)
 
 ### 🌍 **Location Support**
 

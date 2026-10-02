@@ -12,7 +12,7 @@ from ucapi import RequestUserInput, SetupError
 from ucapi_framework import BaseSetupFlow
 
 from uc_intg_weather.client import WeatherClient
-from uc_intg_weather.config import WeatherConfig, build_identifier
+from uc_intg_weather.config import WIND_UNITS, WeatherConfig, build_identifier
 
 _LOG = logging.getLogger(__name__)
 
@@ -61,6 +61,22 @@ class WeatherSetupFlow(BaseSetupFlow[WeatherConfig]):
                     "label": {"en": "Use Celsius (°C) instead of Fahrenheit (°F)"},
                     "field": {"checkbox": {"value": False}},
                 },
+                {
+                    "id": "wind_unit",
+                    "label": {"en": "Wind speed unit"},
+                    "field": {
+                        "dropdown": {
+                            "value": "auto",
+                            "items": [
+                                {"id": "auto", "label": {"en": "Automatic (mph with °F, km/h with °C)"}},
+                                {"id": "mph", "label": {"en": "Miles per hour (mph)"}},
+                                {"id": "kmh", "label": {"en": "Kilometres per hour (km/h)"}},
+                                {"id": "ms", "label": {"en": "Metres per second (m/s)"}},
+                                {"id": "kn", "label": {"en": "Knots (kn)"}},
+                            ],
+                        }
+                    },
+                },
             ]
         )
         return RequestUserInput({"en": "Weather Location"}, settings)
@@ -76,6 +92,9 @@ class WeatherSetupFlow(BaseSetupFlow[WeatherConfig]):
 
         use_celsius = str(input_values.get("use_celsius", False)).strip().lower() == "true"
         temperature_unit = "celsius" if use_celsius else "fahrenheit"
+        wind_unit = str(input_values.get("wind_unit", "")).strip()
+        if wind_unit not in WIND_UNITS:
+            wind_unit = ""
 
         # Priority 1: explicit coordinates
         if lat_str and lon_str:
@@ -97,7 +116,7 @@ class WeatherSetupFlow(BaseSetupFlow[WeatherConfig]):
 
             location_name = display_name or f"Location ({latitude}, {longitude})"
             return self._make_config(
-                latitude, longitude, location_name, temperature_unit
+                latitude, longitude, location_name, temperature_unit, wind_unit
             )
 
         # Priority 2: location string -> geocode
@@ -118,7 +137,7 @@ class WeatherSetupFlow(BaseSetupFlow[WeatherConfig]):
             if display_name:
                 location_name = display_name
             return self._make_config(
-                latitude, longitude, location_name, temperature_unit
+                latitude, longitude, location_name, temperature_unit, wind_unit
             )
 
         return self._build_form(
@@ -138,7 +157,7 @@ class WeatherSetupFlow(BaseSetupFlow[WeatherConfig]):
 
     @staticmethod
     def _make_config(
-        latitude: float, longitude: float, location_name: str, unit: str
+        latitude: float, longitude: float, location_name: str, unit: str, wind_unit: str = ""
     ) -> WeatherConfig:
         identifier = build_identifier(latitude, longitude)
         return WeatherConfig(
@@ -148,4 +167,5 @@ class WeatherSetupFlow(BaseSetupFlow[WeatherConfig]):
             longitude=longitude,
             location_name=location_name,
             temperature_unit=unit,
+            wind_unit=wind_unit,
         )
