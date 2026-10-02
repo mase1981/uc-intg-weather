@@ -29,10 +29,11 @@ classifiers = [
 ]
 
 dependencies = [
-    "ucapi-framework>=1.9.6",
+    "ucapi-framework>=1.9.7",
     "ucapi>=0.7.0",
     "aiohttp>=3.9.0",
-    "certifi>=2024.0.0"
+    "certifi>=2024.0.0",
+    "pillow>=10.0.0"
 ]
 dynamic = ["version"]
 
@@ -53,7 +54,7 @@ packages = ["uc_intg_weather"]
 version = {attr = "uc_intg_weather.__version__"}
 
 [tool.setuptools.package-data]
-"uc_intg_weather" = ["*.json", "icons/*.png"]
+"uc_intg_weather" = ["*.json", "icons/*.png", "fonts/*.ttf", "fonts/*.txt"]
 
 [project.scripts]
 uc-intg-weather = "uc_intg_weather:main"

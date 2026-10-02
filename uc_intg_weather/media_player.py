@@ -8,10 +8,12 @@ and provides hourly forecast media player entities.
 :license: MPL-2.0, see LICENSE for more details.
 """
 
+import asyncio
 import base64
 import logging
 import os
-from typing import Any
+from datetime import datetime, timedelta, timezone
+from typing import Any, Callable
 
 from ucapi import StatusCodes, media_player
 from ucapi_framework import MediaPlayerEntity
@@ -21,10 +23,29 @@ from uc_intg_weather.device import WeatherDevice
 
 _LOG = logging.getLogger(__name__)
 
+# Dynamic artwork needs Pillow; without it the static icons are used.
+try:
+    from uc_intg_weather import scene as _scene
+except Exception as _err:  # pylint: disable=broad-exception-caught
+    _scene = None
+    _LOG.warning("Dynamic weather artwork disabled, using icons: %s", _err)
+
 _FEATURES = [media_player.Features.ON_OFF]
 _FALLBACK_ICONS = ["sun.png", "cloud.png"]
 
 _FORECAST_HOURS = range(1, 7)
+
+
+def _quantize(position: float | None) -> float | None:
+    """Round the sun/moon position so the card is redrawn about every 2% of the arc."""
+    return None if position is None else round(position * 50) / 50
+
+
+def _degrees(value: Any, fallback: str = "") -> str:
+    try:
+        return f"{round(float(value))}°"
+    except (TypeError, ValueError):
+        return fallback
 
 
 def _precipitation_label(weather_code: int) -> str:
@@ -60,6 +81,8 @@ class WeatherMediaPlayer(MediaPlayerEntity):
     def __init__(self, device_config: WeatherConfig, device: WeatherDevice) -> None:
         self._device = device
         self._icon_cache: dict[str, str] = {}
+        self._scene_key: Any = None
+        self._scene_url: str = ""
         entity_id = f"media_player.{device_config.identifier}"
 
         super().__init__(
@@ -118,7 +141,7 @@ class WeatherMediaPlayer(MediaPlayerEntity):
             attributes[media_player.Attributes.MEDIA_ALBUM] = ""
 
             attributes[media_player.Attributes.MEDIA_IMAGE_URL] = (
-                self._get_icon_base64(self._device.icon_filename)
+                await self._artwork(self._current_scene, self._device.icon_filename)
             )
 
         else:
@@ -129,6 +152,55 @@ class WeatherMediaPlayer(MediaPlayerEntity):
             attributes[media_player.Attributes.MEDIA_ALBUM] = ""
 
         self.update(attributes)
+
+    def _current_scene(self) -> Any:
+        """Build the scene for the current conditions."""
+        dev = self._device
+        now = dev.location_now()
+        is_day = dev.is_day
+        position, golden = dev.sky_state(now, is_day)
+
+        subtitle = dev.location_name
+        high_low = dev.high_low()
+        if high_low:
+            subtitle = f"{subtitle}  •  H {_degrees(high_low[0])}  L {_degrees(high_low[1])}"
+
+        slots = [dev.hourly_forecast(hours) for hours in _FORECAST_HOURS]
+        slots = [slot for slot in slots if slot]
+
+        return _scene.SceneSpec(
+            weather_code=dev.weather_code,
+            is_day=is_day,
+            temperature=_degrees(dev.temperature_value, dev.temperature),
+            description=dev.description,
+            subtitle=subtitle,
+            sky_position=_quantize(position),
+            golden=golden,
+            moon_phase=round(_scene.moon_phase(datetime.now(timezone.utc)), 2),
+            southern=dev.latitude < 0,
+            strip_temps=tuple(round(float(slot["temperature"])) for slot in slots),
+            strip_pops=tuple(int(slot["precipitation_probability"]) for slot in slots),
+            strip_label=f"next {len(slots)}h" if slots else "",
+        )
+
+    async def _artwork(self, build_scene: Callable[[], Any], fallback_icon: str) -> str:
+        """Return the dynamic scene as a data URL, or the static icon on any failure.
+
+        The scene is only re-rendered when its inputs change; otherwise the cached
+        image is reused, so the per-minute clock tick does not redraw the card.
+        """
+        if _scene is not None:
+            try:
+                spec = build_scene()
+                if spec == self._scene_key and self._scene_url:
+                    return self._scene_url
+                data = await asyncio.to_thread(_scene.render, spec)
+                self._scene_url = "data:image/jpeg;base64," + base64.b64encode(data).decode("ascii")
+                self._scene_key = spec
+                return self._scene_url
+            except Exception as err:  # pylint: disable=broad-exception-caught
+                _LOG.warning("Weather scene render failed, using icon: %s", err)
+        return self._get_icon_base64(fallback_icon)
 
     async def _handle_command(
         self,
@@ -200,6 +272,8 @@ class WeatherForecastMediaPlayer(WeatherMediaPlayer):
     ) -> None:
         self._device = device
         self._icon_cache: dict[str, str] = {}
+        self._scene_key: Any = None
+        self._scene_url: str = ""
         self._hours_ahead = hours_ahead
         self._temperature_unit_symbol = (
             "°F"
@@ -275,7 +349,10 @@ class WeatherForecastMediaPlayer(WeatherMediaPlayer):
             attributes[media_player.Attributes.MEDIA_ALBUM] = ""
 
             attributes[media_player.Attributes.MEDIA_IMAGE_URL] = (
-                self._get_icon_base64(forecast["icon"])
+                await self._artwork(
+                    lambda: self._forecast_scene(forecast, forecast_time, precipitation_label),
+                    forecast["icon"],
+                )
             )
 
         else:
@@ -292,6 +369,38 @@ class WeatherForecastMediaPlayer(WeatherMediaPlayer):
             attributes[media_player.Attributes.MEDIA_ALBUM] = ""
 
         self.update(attributes)
+
+    def _forecast_scene(self, forecast: dict, forecast_time: str, precipitation_label: str) -> Any:
+        return _forecast_scene_spec(
+            self._device, forecast, forecast_time, precipitation_label, self._hours_ahead
+        )
+
+
+def _forecast_scene_spec(
+    device: WeatherDevice,
+    forecast: dict,
+    forecast_time: str,
+    precipitation_label: str,
+    hours_ahead: int,
+) -> Any:
+    is_day = bool(forecast["is_day"])
+    position, golden = device.sky_state(forecast["time"], is_day)
+    return _scene.SceneSpec(
+        weather_code=forecast["weather_code"],
+        is_day=is_day,
+        temperature=_degrees(forecast["temperature"]),
+        description=forecast["description"],
+        subtitle=(
+            f"{forecast_time}  •  {precipitation_label} "
+            f"{forecast['precipitation_probability']}%"
+        ),
+        sky_position=_quantize(position),
+        golden=golden,
+        moon_phase=round(
+            _scene.moon_phase(datetime.now(timezone.utc) + timedelta(hours=hours_ahead)), 2
+        ),
+        southern=device.latitude < 0,
+    )
 
 
 def create_weather_forecast_entities(

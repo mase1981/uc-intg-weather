@@ -1,0 +1,362 @@
+"""
+Dynamic weather scene renderer.
+
+Draws a 420x420 JPEG "weather card" for the media player artwork: a sky that
+follows the time of day, the sun or moon (with its real phase) moving along an
+arc between sunrise and sunset, weather layers (clouds, rain, snow, hail, fog,
+lightning) and the temperature. The Remote only supports static JPG/PNG artwork
+(core-api: entity_media_player.md, "Media images"), so the scene is redrawn
+whenever its inputs change instead of being animated.
+
+:copyright: (c) 2025 by Meir Miyara.
+:license: MPL-2.0, see LICENSE for more details.
+"""
+
+from __future__ import annotations
+
+import io
+import math
+import os
+import random
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
+
+# Preferred size for full screen album art (core-api entity_media_player.md).
+SIZE = 420
+JPEG_QUALITY = 85
+
+_FONT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
+_FONT_REGULAR = os.path.join(_FONT_DIR, "DejaVuSans.ttf")
+_FONT_BOLD = os.path.join(_FONT_DIR, "DejaVuSans-Bold.ttf")
+
+# Known new moon (2000-01-06 18:14 UTC) and synodic month length in days.
+_NEW_MOON_REF = datetime(2000, 1, 6, 18, 14, tzinfo=timezone.utc)
+_SYNODIC_MONTH = 29.530588853
+
+_font_cache: dict[tuple[str, int], ImageFont.FreeTypeFont] = {}
+
+
+def _font(path: str, size: int) -> ImageFont.FreeTypeFont:
+    key = (path, size)
+    if key not in _font_cache:
+        _font_cache[key] = ImageFont.truetype(path, size)
+    return _font_cache[key]
+
+
+# ----------------------------------------------------------------------
+# Scene description
+# ----------------------------------------------------------------------
+@dataclass(frozen=True)
+class Condition:
+    """Visual layers derived from an Open-Meteo weather code."""
+
+    clouds: float = 0.0  # 0 = none, 1 = full cover
+    dark_clouds: bool = False
+    rain: int = 0  # number of rain streaks
+    freezing: bool = False
+    snow: int = 0  # number of snowflakes
+    hail: int = 0  # number of hail stones
+    fog: bool = False
+    lightning: bool = False
+    overcast: bool = False  # hides sun/moon and greys the sky
+
+
+def condition_for_code(code: int) -> Condition:
+    """Map an Open-Meteo WMO weather code to scene layers."""
+    if code in (0,):
+        return Condition()
+    if code == 1:
+        return Condition(clouds=0.25)
+    if code == 2:
+        return Condition(clouds=0.55)
+    if code == 3:
+        return Condition(clouds=1.1, overcast=True)
+    if code in (45, 48):
+        return Condition(clouds=0.6, fog=True, overcast=True)
+    if code in (51, 53, 55):
+        return Condition(clouds=1.0, rain=35 + (code - 51) * 10, overcast=True)
+    if code in (56, 57):
+        return Condition(clouds=1.0, rain=45, freezing=True, overcast=True)
+    if code in (61, 80):
+        return Condition(clouds=1.0, rain=60, overcast=True)
+    if code in (63, 81):
+        return Condition(clouds=1.2, dark_clouds=True, rain=100, overcast=True)
+    if code in (65, 82):
+        return Condition(clouds=1.4, dark_clouds=True, rain=150, overcast=True)
+    if code in (66, 67):
+        return Condition(clouds=1.2, dark_clouds=True, rain=90, freezing=True, overcast=True)
+    if code in (71, 85):
+        return Condition(clouds=1.0, snow=45, overcast=True)
+    if code in (73, 86):
+        return Condition(clouds=1.1, snow=80, overcast=True)
+    if code in (75, 77):
+        return Condition(clouds=1.3, snow=120, overcast=True)
+    if code in (87, 88):
+        return Condition(clouds=1.3, dark_clouds=True, rain=50, hail=40, overcast=True)
+    if code == 95:
+        return Condition(clouds=1.6, dark_clouds=True, rain=130, lightning=True, overcast=True)
+    if code in (96, 99):
+        return Condition(
+            clouds=1.6, dark_clouds=True, rain=110, hail=35, lightning=True, overcast=True
+        )
+    return Condition(clouds=0.8)
+
+
+@dataclass(frozen=True)
+class SceneSpec:
+    """Everything needed to draw one card. Equal specs produce equal images."""
+
+    weather_code: int
+    is_day: bool
+    temperature: str  # already formatted, e.g. "18°"
+    description: str
+    subtitle: str
+    sky_position: float | None = None  # 0..1 along the day (or night) arc
+    golden: bool = False  # near sunrise / sunset
+    moon_phase: float = 0.5  # 0 = new, 0.5 = full
+    southern: bool = False  # mirror the moon for the southern hemisphere
+    strip_temps: tuple[float, ...] = field(default_factory=tuple)
+    strip_pops: tuple[int, ...] = field(default_factory=tuple)
+    strip_label: str = ""
+
+
+# ----------------------------------------------------------------------
+# Astronomy helpers
+# ----------------------------------------------------------------------
+def moon_phase(when: datetime) -> float:
+    """Return the moon phase in [0, 1): 0 = new moon, 0.5 = full moon."""
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    days = (when - _NEW_MOON_REF).total_seconds() / 86400.0
+    return (days / _SYNODIC_MONTH) % 1.0
+
+
+# ----------------------------------------------------------------------
+# Drawing
+# ----------------------------------------------------------------------
+_SKY_DAY = ((38, 108, 210), (140, 196, 246))
+_SKY_GOLDEN = ((72, 62, 142), (250, 152, 82))
+_SKY_NIGHT = ((8, 12, 35), (30, 40, 86))
+_SKY_OVERCAST_DAY = ((96, 106, 122), (162, 170, 180))
+_SKY_OVERCAST_NIGHT = ((18, 20, 30), (48, 52, 66))
+_SKY_STORM = ((30, 25, 50), (76, 70, 96))
+
+
+def _lerp(a: tuple[int, ...], b: tuple[int, ...], t: float) -> tuple[int, ...]:
+    return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(3))
+
+
+def _sky(spec: SceneSpec, cond: Condition) -> Image.Image:
+    if cond.lightning:
+        top, bottom = _SKY_STORM
+    elif not spec.is_day:
+        top, bottom = _SKY_OVERCAST_NIGHT if cond.overcast else _SKY_NIGHT
+    elif spec.golden and not cond.overcast:
+        top, bottom = _SKY_GOLDEN
+    elif cond.overcast:
+        top, bottom = _SKY_OVERCAST_DAY
+        if cond.dark_clouds:
+            top, bottom = _lerp(top, (0, 0, 0), 0.25), _lerp(bottom, (0, 0, 0), 0.25)
+    else:
+        top, bottom = _SKY_DAY
+
+    img = Image.new("RGB", (SIZE, SIZE))
+    draw = ImageDraw.Draw(img)
+    for y in range(SIZE):
+        draw.line([(0, y), (SIZE, y)], fill=_lerp(top, bottom, y / SIZE))
+    return img.convert("RGBA")
+
+
+def _glow(img: Image.Image, xy: tuple[float, float], radius: float, color, blur: float) -> None:
+    layer = Image.new("RGBA", img.size, color[:3] + (0,))
+    ImageDraw.Draw(layer).ellipse(
+        [xy[0] - radius, xy[1] - radius, xy[0] + radius, xy[1] + radius], fill=color
+    )
+    img.alpha_composite(layer.filter(ImageFilter.GaussianBlur(blur)))
+
+
+def _arc_point(position: float) -> tuple[float, float]:
+    x = 45 + position * (SIZE - 90)
+    y = 200 - math.sin(position * math.pi) * 135
+    return x, y
+
+
+def _sun(img: Image.Image, position: float) -> None:
+    x, y = _arc_point(position)
+    _glow(img, (x, y), 62, (255, 220, 120, 120), 26)
+    _glow(img, (x, y), 30, (255, 241, 182, 255), 3)
+
+
+def _moon(img: Image.Image, position: float, phase: float, southern: bool) -> None:
+    x, y = _arc_point(position)
+    radius = 26
+    _glow(img, (x, y), 42, (200, 210, 255, 70), 16)
+
+    # Shadowed disc, then the lit part row by row (terminator is an ellipse).
+    layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(layer)
+    draw.ellipse([x - radius, y - radius, x + radius, y + radius], fill=(60, 66, 90, 140))
+    k = math.cos(2 * math.pi * phase)
+    waxing = phase < 0.5
+    if southern:
+        waxing = not waxing
+    for dy in range(-radius, radius + 1):
+        half = math.sqrt(max(0.0, radius * radius - dy * dy))
+        if waxing:
+            left, right = k * half, half
+        else:
+            left, right = -half, -k * half
+        if right - left > 0.5:
+            draw.line([(x + left, y + dy), (x + right, y + dy)], fill=(242, 242, 226, 255))
+    img.alpha_composite(layer)
+
+
+def _stars(img: Image.Image, rnd: random.Random, count: int) -> None:
+    draw = ImageDraw.Draw(img)
+    for _ in range(count):
+        x, y = rnd.randrange(SIZE), rnd.randrange(230)
+        draw.point((x, y), fill=(255, 255, 255, rnd.randrange(90, 255)))
+
+
+def _clouds(img: Image.Image, rnd: random.Random, density: float, dark: bool) -> None:
+    base = (88, 90, 104) if dark else (244, 246, 252)
+    layer = Image.new("RGBA", img.size, base + (0,))
+    draw = ImageDraw.Draw(layer)
+    alpha = int(150 * min(1.0, density))
+    for _ in range(max(1, int(6 * density))):
+        cx, cy = rnd.randrange(-40, SIZE + 40), rnd.randrange(35, 210)
+        for _ in range(5):
+            w, h = rnd.randrange(60, 130), rnd.randrange(35, 65)
+            ox, oy = rnd.randrange(-55, 55), rnd.randrange(-14, 14)
+            draw.ellipse([cx + ox - w, cy + oy - h, cx + ox + w, cy + oy + h], fill=base + (alpha,))
+    img.alpha_composite(layer.filter(ImageFilter.GaussianBlur(13)))
+
+
+def _rain(img: Image.Image, rnd: random.Random, count: int, freezing: bool) -> None:
+    color = (210, 235, 255, 170) if freezing else (190, 215, 255, 150)
+    draw = ImageDraw.Draw(img)
+    for _ in range(count):
+        x, y = rnd.randrange(SIZE), rnd.randrange(SIZE)
+        draw.line([(x, y), (x - 5, y + 16)], fill=color, width=2)
+
+
+def _snow(img: Image.Image, rnd: random.Random, count: int) -> None:
+    draw = ImageDraw.Draw(img)
+    for _ in range(count):
+        r = rnd.choice((2, 2, 3, 4))
+        x, y = rnd.randrange(SIZE), rnd.randrange(SIZE)
+        draw.ellipse([x - r, y - r, x + r, y + r], fill=(255, 255, 255, 220))
+
+
+def _hail(img: Image.Image, rnd: random.Random, count: int) -> None:
+    draw = ImageDraw.Draw(img)
+    for _ in range(count):
+        r = rnd.choice((3, 4, 5))
+        x, y = rnd.randrange(SIZE), rnd.randrange(SIZE)
+        draw.ellipse([x - r, y - r, x + r, y + r], fill=(230, 240, 255, 235), outline=(160, 180, 210, 255))
+
+
+def _fog(img: Image.Image) -> None:
+    layer = Image.new("RGBA", img.size, (235, 235, 240, 0))
+    draw = ImageDraw.Draw(layer)
+    for y in range(110, 270, 30):
+        draw.rectangle([0, y, SIZE, y + 12], fill=(235, 235, 240, 110))
+    img.alpha_composite(layer.filter(ImageFilter.GaussianBlur(7)))
+
+
+def _lightning(img: Image.Image, rnd: random.Random) -> None:
+    x = rnd.randrange(170, 300)
+    points = [(x, 95), (x - 28, 170), (x - 2, 170), (x - 40, 255)]
+    draw = ImageDraw.Draw(img)
+    for width, alpha in ((13, 60), (6, 140), (3, 255)):
+        draw.line(points, fill=(255, 250, 200, alpha), width=width, joint="curve")
+
+
+def _text(img: Image.Image, spec: SceneSpec) -> None:
+    shade = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    shade_draw = ImageDraw.Draw(shade)
+    for y in range(215, SIZE):
+        shade_draw.line([(0, y), (SIZE, y)], fill=(0, 0, 0, int(175 * (y - 215) / (SIZE - 215))))
+    img.alpha_composite(shade)
+
+    draw = ImageDraw.Draw(img)
+    draw.text((24, 232), spec.temperature, font=_font(_FONT_BOLD, 80), fill="white")
+    draw.text(
+        (26, 322), _fit(spec.description, _FONT_BOLD, 24, SIZE - 52), font=_font(_FONT_BOLD, 24), fill="white"
+    )
+    draw.text(
+        (26, 356), _fit(spec.subtitle, _FONT_REGULAR, 17, SIZE - 52), font=_font(_FONT_REGULAR, 17),
+        fill=(222, 226, 236),
+    )
+
+
+def _fit(text: str, font_path: str, size: int, max_width: int) -> str:
+    font = _font(font_path, size)
+    if font.getlength(text) <= max_width:
+        return text
+    while text and font.getlength(text + "…") > max_width:
+        text = text[:-1]
+    return text.rstrip() + "…"
+
+
+def _strip(img: Image.Image, spec: SceneSpec) -> None:
+    temps, pops = spec.strip_temps, spec.strip_pops
+    if len(temps) < 2:
+        return
+    draw = ImageDraw.Draw(img)
+    x0, x1, y0 = 250, 396, 250
+    lo, hi = min(temps), max(temps)
+    step = (x1 - x0) / (len(temps) - 1)
+    points = [
+        (x0 + i * step, y0 + 42 - (t - lo) / max(1.0, hi - lo) * 42) for i, t in enumerate(temps)
+    ]
+    for i, pop in enumerate(pops[: len(temps)]):
+        height = max(2.0, pop / 100 * 30)
+        x = x0 + i * step
+        draw.rectangle([x - 5, 320 - height, x + 5, 320], fill=(120, 180, 255, 210))
+    draw.line(points, fill=(255, 210, 120), width=3, joint="curve")
+    for px, py in points:
+        draw.ellipse([px - 3.5, py - 3.5, px + 3.5, py + 3.5], fill="white")
+    if spec.strip_label:
+        font = _font(_FONT_REGULAR, 13)
+        draw.text((x1 - font.getlength(spec.strip_label), 226), spec.strip_label, font=font, fill=(205, 210, 220))
+
+
+def render(spec: SceneSpec) -> bytes:
+    """Render a scene and return JPEG bytes."""
+    cond = condition_for_code(spec.weather_code)
+    # Stable layout per condition so redraws only change what actually moved.
+    rnd = random.Random(f"{spec.weather_code}-{int(spec.is_day)}")
+
+    img = _sky(spec, cond)
+
+    if not spec.is_day and not cond.overcast:
+        _stars(img, rnd, 70)
+
+    if spec.sky_position is not None and not cond.overcast:
+        if spec.is_day:
+            _sun(img, spec.sky_position)
+        else:
+            _moon(img, spec.sky_position, spec.moon_phase, spec.southern)
+
+    if cond.clouds:
+        _clouds(img, rnd, cond.clouds, cond.dark_clouds or not spec.is_day)
+    if cond.fog:
+        _fog(img)
+    if cond.lightning:
+        _lightning(img, rnd)
+    if cond.rain:
+        _rain(img, rnd, cond.rain, cond.freezing)
+    if cond.hail:
+        _hail(img, rnd, cond.hail)
+    if cond.snow:
+        _snow(img, rnd, cond.snow)
+
+    _text(img, spec)
+    _strip(img, spec)
+
+    out = io.BytesIO()
+    img.convert("RGB").save(out, format="JPEG", quality=JPEG_QUALITY, optimize=True)
+    return out.getvalue()

@@ -168,6 +168,98 @@ class WeatherDevice(PollingDevice):
             "is_day": is_day,
         }
 
+    # ------------------------------------------------------------------
+    # Scene helpers (dynamic artwork)
+    # ------------------------------------------------------------------
+    @property
+    def latitude(self) -> float:
+        return self._device_config.latitude
+
+    @property
+    def temperature_value(self) -> float | None:
+        if not self._weather_data:
+            return None
+        return self._weather_data.get("temperature_value")
+
+    @property
+    def is_day(self) -> bool:
+        if not self._weather_data:
+            return True
+        return bool(self._weather_data.get("is_day", 1))
+
+    @property
+    def weather_code(self) -> int:
+        if not self._weather_data:
+            return 0
+        return self._weather_data.get("weather_code", 0)
+
+    def location_now(self) -> datetime:
+        """Return the current wall-clock time at the weather location (naive)."""
+        utc_offset_seconds = (
+            self._weather_data.get("utc_offset_seconds", 0) if self._weather_data else 0
+        )
+        return (
+            datetime.now(timezone.utc) + timedelta(seconds=utc_offset_seconds)
+        ).replace(tzinfo=None)
+
+    def _daily_value(self, field: str, day: datetime) -> Any:
+        daily = self._weather_data.get("daily", {}) if self._weather_data else {}
+        days = daily.get("time", [])
+        values = daily.get(field, [])
+        key = day.date().isoformat()
+        if key in days:
+            index = days.index(key)
+            if index < len(values):
+                return values[index]
+        return None
+
+    def high_low(self) -> tuple[float, float] | None:
+        """Return today's (max, min) temperature at the location."""
+        now = self.location_now()
+        high = self._daily_value("temperature_2m_max", now)
+        low = self._daily_value("temperature_2m_min", now)
+        if high is None or low is None:
+            return None
+        return high, low
+
+    def sky_state(self, when: datetime, is_day: bool) -> tuple[float | None, bool]:
+        """Return (position along the sun/moon arc 0..1, golden hour) for a local time."""
+        try:
+            day = timedelta(days=1)
+            sunrise = self._parse(self._daily_value("sunrise", when))
+            sunset = self._parse(self._daily_value("sunset", when))
+            if sunrise is None or sunset is None or sunset <= sunrise:
+                return None, False  # polar day/night or no data
+
+            if is_day:
+                start, end = sunrise, sunset
+            elif when >= sunset:
+                start = sunset
+                end = self._parse(self._daily_value("sunrise", when + day)) or sunrise + day
+            else:
+                start = self._parse(self._daily_value("sunset", when - day)) or sunset - day
+                end = sunrise
+
+            span = (end - start).total_seconds()
+            if span <= 0:
+                return None, False
+            position = min(1.0, max(0.0, (when - start).total_seconds() / span))
+
+            golden_window = 45 * 60
+            golden = is_day and (
+                abs((when - sunrise).total_seconds()) <= golden_window
+                or abs((sunset - when).total_seconds()) <= golden_window
+            )
+            return position, golden
+        except (TypeError, ValueError):
+            return None, False
+
+    @staticmethod
+    def _parse(value: Any) -> datetime | None:
+        if not value:
+            return None
+        return datetime.fromisoformat(value)
+
     @property
     def current_hour_forecast(self) -> dict | None:
         """Return the hourly forecast slot containing the current time."""

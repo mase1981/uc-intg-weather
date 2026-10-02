@@ -48,6 +48,7 @@ jobs:
               pyinstaller --clean --onedir --name intg-${{ env.DRIVER_ID }} \
                 --add-data driver.json:. \
                 --add-data uc_intg_${INTG_NAME}/icons:uc_intg_${INTG_NAME}/icons \
+                --add-data uc_intg_${INTG_NAME}/fonts:uc_intg_${INTG_NAME}/fonts \
                 --collect-all zeroconf \
                 --collect-all ucapi \
                 --collect-all ucapi_framework \

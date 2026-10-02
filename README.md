@@ -40,6 +40,14 @@ Your support helps maintain this integration. Thank you! ❤️
 - **Smart Display** - Time + Weather + Temperature format
 - **Battery Aware** - Stops when the tile is not displayed and during standby; resumes automatically
 
+#### **Dynamic Weather Scenes**
+- **Living Artwork** - Each tile shows a generated weather scene instead of a fixed icon
+- **Sky Follows the Day** - Daylight blue, golden hour at sunrise/sunset, starry night sky
+- **Sun & Moon Tracking** - The sun moves along its arc between real sunrise and sunset; the moon shows its actual phase (mirrored for the southern hemisphere)
+- **Weather Layers** - Clouds, drizzle, rain, freezing rain, snow, hail, fog and lightning
+- **At-a-Glance Forecast** - Main tile shows today's high/low and a 6-hour temperature and rain chance strip
+- **Efficient** - Redrawn only when the scene changes (420x420 JPEG, ~15-30 KB); falls back to the classic icons if rendering is unavailable
+
 #### **Real-Time Weather Information**
 - **Current Temperature** - Fahrenheit or Celsius display
 - **Weather Description** - Human-readable conditions
