@@ -46,7 +46,7 @@ Your support helps maintain this integration. Thank you! ❤️
 - **Sun & Moon Tracking** - The sun moves along its arc between real sunrise and sunset; the moon shows its actual phase (mirrored for the southern hemisphere)
 - **Weather Layers** - Clouds, drizzle, rain, freezing rain, snow, hail, fog and lightning
 - **At-a-Glance Forecast** - Main tile shows today's high/low and a 6-hour temperature and rain chance strip
-- **Efficient** - Redrawn only when the scene changes (420x420 JPEG, ~15-30 KB); falls back to the classic icons if rendering is unavailable
+- **Efficient** - Redrawn only when the scene changes (480x420 JPEG sized for the Remote 3 artwork box, ~15-30 KB); falls back to the classic icons if rendering is unavailable
 
 #### **Real-Time Weather Information**
 - **Current Temperature** - Fahrenheit or Celsius display

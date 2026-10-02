@@ -1,7 +1,7 @@
 """
 Dynamic weather scene renderer.
 
-Draws a 420x420 JPEG "weather card" for the media player artwork: a sky that
+Draws a 480x420 JPEG "weather card" for the media player artwork: a sky that
 follows the time of day, the sun or moon (with its real phase) moving along an
 arc between sunrise and sunset, weather layers (clouds, rain, snow, hail, fog,
 lightning) and the temperature. The Remote only supports static JPG/PNG artwork
@@ -23,8 +23,13 @@ from datetime import datetime, timezone
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-# Preferred size for full screen album art (core-api entity_media_player.md).
-SIZE = 420
+# Remote 3 media player artwork box (remote-ui deviceclass/*.qml): full page width
+# (480) by width - 60, filled with PreserveAspectCrop + AlignTop. A square image
+# loses its bottom, so render at the box ratio. The Remote Two box is square and
+# crops the sides instead: keep text and the strip inside SAFE_X of each edge.
+WIDTH = 480
+HEIGHT = 420
+SAFE_X = 40
 JPEG_QUALITY = 85
 
 _FONT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
@@ -162,10 +167,10 @@ def _sky(spec: SceneSpec, cond: Condition) -> Image.Image:
     else:
         top, bottom = _SKY_DAY
 
-    img = Image.new("RGB", (SIZE, SIZE))
+    img = Image.new("RGB", (WIDTH, HEIGHT))
     draw = ImageDraw.Draw(img)
-    for y in range(SIZE):
-        draw.line([(0, y), (SIZE, y)], fill=_lerp(top, bottom, y / SIZE))
+    for y in range(HEIGHT):
+        draw.line([(0, y), (WIDTH, y)], fill=_lerp(top, bottom, y / HEIGHT))
     return img.convert("RGBA")
 
 
@@ -178,7 +183,7 @@ def _glow(img: Image.Image, xy: tuple[float, float], radius: float, color, blur:
 
 
 def _arc_point(position: float) -> tuple[float, float]:
-    x = 45 + position * (SIZE - 90)
+    x = SAFE_X + 20 + position * (WIDTH - 2 * (SAFE_X + 20))
     y = 200 - math.sin(position * math.pi) * 135
     return x, y
 
@@ -216,7 +221,7 @@ def _moon(img: Image.Image, position: float, phase: float, southern: bool) -> No
 def _stars(img: Image.Image, rnd: random.Random, count: int) -> None:
     draw = ImageDraw.Draw(img)
     for _ in range(count):
-        x, y = rnd.randrange(SIZE), rnd.randrange(230)
+        x, y = rnd.randrange(WIDTH), rnd.randrange(230)
         draw.point((x, y), fill=(255, 255, 255, rnd.randrange(90, 255)))
 
 
@@ -226,7 +231,7 @@ def _clouds(img: Image.Image, rnd: random.Random, density: float, dark: bool) ->
     draw = ImageDraw.Draw(layer)
     alpha = int(150 * min(1.0, density))
     for _ in range(max(1, int(6 * density))):
-        cx, cy = rnd.randrange(-40, SIZE + 40), rnd.randrange(35, 210)
+        cx, cy = rnd.randrange(-40, WIDTH + 40), rnd.randrange(35, 210)
         for _ in range(5):
             w, h = rnd.randrange(60, 130), rnd.randrange(35, 65)
             ox, oy = rnd.randrange(-55, 55), rnd.randrange(-14, 14)
@@ -238,7 +243,7 @@ def _rain(img: Image.Image, rnd: random.Random, count: int, freezing: bool) -> N
     color = (210, 235, 255, 170) if freezing else (190, 215, 255, 150)
     draw = ImageDraw.Draw(img)
     for _ in range(count):
-        x, y = rnd.randrange(SIZE), rnd.randrange(SIZE)
+        x, y = rnd.randrange(WIDTH), rnd.randrange(HEIGHT)
         draw.line([(x, y), (x - 5, y + 16)], fill=color, width=2)
 
 
@@ -246,7 +251,7 @@ def _snow(img: Image.Image, rnd: random.Random, count: int) -> None:
     draw = ImageDraw.Draw(img)
     for _ in range(count):
         r = rnd.choice((2, 2, 3, 4))
-        x, y = rnd.randrange(SIZE), rnd.randrange(SIZE)
+        x, y = rnd.randrange(WIDTH), rnd.randrange(HEIGHT)
         draw.ellipse([x - r, y - r, x + r, y + r], fill=(255, 255, 255, 220))
 
 
@@ -254,7 +259,7 @@ def _hail(img: Image.Image, rnd: random.Random, count: int) -> None:
     draw = ImageDraw.Draw(img)
     for _ in range(count):
         r = rnd.choice((3, 4, 5))
-        x, y = rnd.randrange(SIZE), rnd.randrange(SIZE)
+        x, y = rnd.randrange(WIDTH), rnd.randrange(HEIGHT)
         draw.ellipse([x - r, y - r, x + r, y + r], fill=(230, 240, 255, 235), outline=(160, 180, 210, 255))
 
 
@@ -262,7 +267,7 @@ def _fog(img: Image.Image) -> None:
     layer = Image.new("RGBA", img.size, (235, 235, 240, 0))
     draw = ImageDraw.Draw(layer)
     for y in range(110, 270, 30):
-        draw.rectangle([0, y, SIZE, y + 12], fill=(235, 235, 240, 110))
+        draw.rectangle([0, y, WIDTH, y + 12], fill=(235, 235, 240, 110))
     img.alpha_composite(layer.filter(ImageFilter.GaussianBlur(7)))
 
 
@@ -277,17 +282,18 @@ def _lightning(img: Image.Image, rnd: random.Random) -> None:
 def _text(img: Image.Image, spec: SceneSpec) -> None:
     shade = Image.new("RGBA", img.size, (0, 0, 0, 0))
     shade_draw = ImageDraw.Draw(shade)
-    for y in range(215, SIZE):
-        shade_draw.line([(0, y), (SIZE, y)], fill=(0, 0, 0, int(175 * (y - 215) / (SIZE - 215))))
+    for y in range(215, HEIGHT):
+        shade_draw.line([(0, y), (WIDTH, y)], fill=(0, 0, 0, int(175 * (y - 215) / (HEIGHT - 215))))
     img.alpha_composite(shade)
 
     draw = ImageDraw.Draw(img)
-    draw.text((24, 232), spec.temperature, font=_font(_FONT_BOLD, 80), fill="white")
+    text_width = WIDTH - 2 * SAFE_X
+    draw.text((SAFE_X - 2, 232), spec.temperature, font=_font(_FONT_BOLD, 80), fill="white")
     draw.text(
-        (26, 322), _fit(spec.description, _FONT_BOLD, 24, SIZE - 52), font=_font(_FONT_BOLD, 24), fill="white"
+        (SAFE_X, 322), _fit(spec.description, _FONT_BOLD, 24, text_width), font=_font(_FONT_BOLD, 24), fill="white"
     )
     draw.text(
-        (26, 356), _fit(spec.subtitle, _FONT_REGULAR, 17, SIZE - 52), font=_font(_FONT_REGULAR, 17),
+        (SAFE_X, 356), _fit(spec.subtitle, _FONT_REGULAR, 17, text_width), font=_font(_FONT_REGULAR, 17),
         fill=(222, 226, 236),
     )
 
@@ -306,7 +312,8 @@ def _strip(img: Image.Image, spec: SceneSpec) -> None:
     if len(temps) < 2:
         return
     draw = ImageDraw.Draw(img)
-    x0, x1, y0 = 250, 396, 250
+    x1 = WIDTH - SAFE_X - 4
+    x0, y0 = x1 - 150, 250
     lo, hi = min(temps), max(temps)
     step = (x1 - x0) / (len(temps) - 1)
     points = [
