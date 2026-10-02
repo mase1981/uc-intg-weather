@@ -13,6 +13,7 @@ from uc_intg_weather.config import WeatherConfig
 from uc_intg_weather.device import WeatherDevice
 from uc_intg_weather.media_player import (
     WeatherMediaPlayer,
+    create_weather_daily_entities,
     create_weather_forecast_entities,
 )
 
@@ -28,6 +29,7 @@ class WeatherDriver(BaseIntegrationDriver[WeatherDevice, WeatherConfig]):
             entity_classes=[
                 WeatherMediaPlayer,
                 create_weather_forecast_entities,
+                create_weather_daily_entities,
             ],
             driver_id="weather_display",
         )

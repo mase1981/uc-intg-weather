@@ -125,6 +125,9 @@ class SceneSpec:
     strip_temps: tuple[float, ...] = field(default_factory=tuple)
     strip_pops: tuple[int, ...] = field(default_factory=tuple)
     strip_label: str = ""
+    info_line: str = ""  # small extra line, e.g. feels like / wind / UV
+    wind: float = 0.0  # 0 = calm, 1 = very windy (streaks and slanted rain)
+    twilight: bool = False  # blue hour just after sunset / before sunrise
 
 
 # ----------------------------------------------------------------------
@@ -144,6 +147,7 @@ def moon_phase(when: datetime) -> float:
 _SKY_DAY = ((38, 108, 210), (140, 196, 246))
 _SKY_GOLDEN = ((72, 62, 142), (250, 152, 82))
 _SKY_NIGHT = ((8, 12, 35), (30, 40, 86))
+_SKY_TWILIGHT = ((22, 28, 78), (118, 84, 150))
 _SKY_OVERCAST_DAY = ((96, 106, 122), (162, 170, 180))
 _SKY_OVERCAST_NIGHT = ((18, 20, 30), (48, 52, 66))
 _SKY_STORM = ((30, 25, 50), (76, 70, 96))
@@ -157,7 +161,10 @@ def _sky(spec: SceneSpec, cond: Condition) -> Image.Image:
     if cond.lightning:
         top, bottom = _SKY_STORM
     elif not spec.is_day:
-        top, bottom = _SKY_OVERCAST_NIGHT if cond.overcast else _SKY_NIGHT
+        if cond.overcast:
+            top, bottom = _SKY_OVERCAST_NIGHT
+        else:
+            top, bottom = _SKY_TWILIGHT if spec.twilight else _SKY_NIGHT
     elif spec.golden and not cond.overcast:
         top, bottom = _SKY_GOLDEN
     elif cond.overcast:
@@ -239,12 +246,27 @@ def _clouds(img: Image.Image, rnd: random.Random, density: float, dark: bool) ->
     img.alpha_composite(layer.filter(ImageFilter.GaussianBlur(13)))
 
 
-def _rain(img: Image.Image, rnd: random.Random, count: int, freezing: bool) -> None:
+def _rain(img: Image.Image, rnd: random.Random, count: int, freezing: bool, wind: float) -> None:
     color = (210, 235, 255, 170) if freezing else (190, 215, 255, 150)
+    slant = 5 + 12 * wind
     draw = ImageDraw.Draw(img)
     for _ in range(count):
         x, y = rnd.randrange(WIDTH), rnd.randrange(HEIGHT)
-        draw.line([(x, y), (x - 5, y + 16)], fill=color, width=2)
+        draw.line([(x, y), (x - slant, y + 16)], fill=color, width=2)
+
+
+def _wind(img: Image.Image, rnd: random.Random, strength: float) -> None:
+    layer = Image.new("RGBA", img.size, (255, 255, 255, 0))
+    draw = ImageDraw.Draw(layer)
+    for _ in range(int(4 + 10 * strength)):
+        x, y = rnd.randrange(-80, WIDTH), rnd.randrange(30, 230)
+        length = rnd.randrange(60, 160)
+        bend = rnd.randrange(-8, 8)
+        draw.line(
+            [(x, y), (x + length * 0.6, y + bend), (x + length, y + bend // 2)],
+            fill=(255, 255, 255, int(70 + 80 * strength)), width=2, joint="curve",
+        )
+    img.alpha_composite(layer.filter(ImageFilter.GaussianBlur(1)))
 
 
 def _snow(img: Image.Image, rnd: random.Random, count: int) -> None:
@@ -296,6 +318,11 @@ def _text(img: Image.Image, spec: SceneSpec) -> None:
         (SAFE_X, 356), _fit(spec.subtitle, _FONT_REGULAR, 17, text_width), font=_font(_FONT_REGULAR, 17),
         fill=(222, 226, 236),
     )
+    if spec.info_line:
+        draw.text(
+            (SAFE_X, 383), _fit(spec.info_line, _FONT_REGULAR, 15, text_width),
+            font=_font(_FONT_REGULAR, 15), fill=(196, 204, 218),
+        )
 
 
 def _fit(text: str, font_path: str, size: int, max_width: int) -> str:
@@ -340,7 +367,7 @@ def render(spec: SceneSpec) -> bytes:
     img = _sky(spec, cond)
 
     if not spec.is_day and not cond.overcast:
-        _stars(img, rnd, 70)
+        _stars(img, rnd, 30 if spec.twilight else 70)
 
     if spec.sky_position is not None and not cond.overcast:
         if spec.is_day:
@@ -352,10 +379,12 @@ def render(spec: SceneSpec) -> bytes:
         _clouds(img, rnd, cond.clouds, cond.dark_clouds or not spec.is_day)
     if cond.fog:
         _fog(img)
+    if spec.wind >= 0.25:
+        _wind(img, rnd, spec.wind)
     if cond.lightning:
         _lightning(img, rnd)
     if cond.rain:
-        _rain(img, rnd, cond.rain, cond.freezing)
+        _rain(img, rnd, cond.rain, cond.freezing, spec.wind)
     if cond.hail:
         _hail(img, rnd, cond.hail)
     if cond.snow:

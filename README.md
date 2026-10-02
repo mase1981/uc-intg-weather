@@ -46,7 +46,14 @@ Your support helps maintain this integration. Thank you! ❤️
 - **Sun & Moon Tracking** - The sun moves along its arc between real sunrise and sunset; the moon shows its actual phase (mirrored for the southern hemisphere)
 - **Weather Layers** - Clouds, drizzle, rain, freezing rain, snow, hail, fog and lightning
 - **At-a-Glance Forecast** - Main tile shows today's high/low and a 6-hour temperature and rain chance strip
+- **Feels Like, Wind & UV** - Main tile adds the feels-like temperature, wind speed and direction, and the UV index (daytime)
+- **Wind & Twilight** - Windy weather adds wind streaks and slants the rain; a blue-hour sky appears just after sunset and before sunrise
 - **Efficient** - Redrawn only when the scene changes (480x420 JPEG sized for the Remote 3 artwork box, ~15-30 KB); falls back to the classic icons if rendering is unavailable
+
+#### **Daily Forecast Tiles**
+- **5-Day Outlook** - "Weather Tomorrow" through "Weather +5 days" entities
+- **Per Day** - Conditions scene, high/low, rain chance, sunrise/sunset and UV index
+- **Optional** - Add only the tiles you want; existing entities are unchanged
 
 #### **Real-Time Weather Information**
 - **Current Temperature** - Fahrenheit or Celsius display

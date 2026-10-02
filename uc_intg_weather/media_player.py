@@ -34,11 +34,34 @@ _FEATURES = [media_player.Features.ON_OFF]
 _FALLBACK_ICONS = ["sun.png", "cloud.png"]
 
 _FORECAST_HOURS = range(1, 7)
+_FORECAST_DAYS = range(1, 6)
+_COMPASS = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
 
 
 def _quantize(position: float | None) -> float | None:
     """Round the sun/moon position so the card is redrawn about every 2% of the arc."""
     return None if position is None else round(position * 50) / 50
+
+
+def _compass(degrees: Any) -> str:
+    try:
+        return _COMPASS[int((float(degrees) % 360) / 45 + 0.5) % 8]
+    except (TypeError, ValueError):
+        return ""
+
+
+def _wind_strength(speed: Any, gusts: Any, unit_label: str) -> float:
+    """Map wind speed (and gusts) to 0..1 in quarter steps for the scene."""
+    try:
+        value = max(float(speed or 0), 0.7 * float(gusts or 0))
+    except (TypeError, ValueError):
+        return 0.0
+    mph = value if unit_label == "mph" else value / 1.609
+    return round(min(1.0, max(0.0, (mph - 12) / 25)) * 4) / 4
+
+
+def _clock(value: datetime | None) -> str:
+    return value.strftime("%I:%M %p").lstrip("0") if value else ""
 
 
 def _degrees(value: Any, fallback: str = "") -> str:
@@ -168,6 +191,18 @@ class WeatherMediaPlayer(MediaPlayerEntity):
         slots = [dev.hourly_forecast(hours) for hours in _FORECAST_HOURS]
         slots = [slot for slot in slots if slot]
 
+        info = []
+        feels = _degrees(dev.current_value("apparent_temperature"))
+        if feels:
+            info.append(f"Feels {feels}")
+        wind_speed = dev.current_value("wind_speed_10m")
+        if wind_speed is not None:
+            direction = _compass(dev.current_value("wind_direction_10m"))
+            info.append(f"Wind {round(float(wind_speed))} {dev.wind_unit_label} {direction}".rstrip())
+        uv_index = dev.current_value("uv_index")
+        if uv_index is not None and is_day:
+            info.append(f"UV {round(float(uv_index))}")
+
         return _scene.SceneSpec(
             weather_code=dev.weather_code,
             is_day=is_day,
@@ -181,6 +216,11 @@ class WeatherMediaPlayer(MediaPlayerEntity):
             strip_temps=tuple(round(float(slot["temperature"])) for slot in slots),
             strip_pops=tuple(int(slot["precipitation_probability"]) for slot in slots),
             strip_label=f"next {len(slots)}h" if slots else "",
+            info_line="  •  ".join(info),
+            wind=_wind_strength(
+                wind_speed, dev.current_value("wind_gusts_10m"), dev.wind_unit_label
+            ),
+            twilight=not is_day and dev.is_twilight(now),
         )
 
     async def _artwork(self, build_scene: Callable[[], Any], fallback_icon: str) -> str:
@@ -401,6 +441,120 @@ def _forecast_scene_spec(
         ),
         southern=device.latitude < 0,
     )
+
+
+class WeatherDailyMediaPlayer(WeatherMediaPlayer):
+    """Media player displaying the forecast for one upcoming day."""
+
+    def __init__(
+        self,
+        device_config: WeatherConfig,
+        device: WeatherDevice,
+        days_ahead: int,
+    ) -> None:
+        self._device = device
+        self._icon_cache: dict[str, str] = {}
+        self._scene_key: Any = None
+        self._scene_url: str = ""
+        self._days_ahead = days_ahead
+        self._temperature_unit_symbol = (
+            "°F" if device_config.temperature_unit == "fahrenheit" else "°C"
+        )
+
+        entity_name = "Weather Tomorrow" if days_ahead == 1 else f"Weather +{days_ahead} days"
+
+        MediaPlayerEntity.__init__(
+            self,
+            f"media_player.{device_config.identifier}.forecast_{days_ahead}d",
+            entity_name,
+            _FEATURES,
+            {
+                media_player.Attributes.STATE: media_player.States.UNKNOWN,
+                media_player.Attributes.MEDIA_TITLE: "",
+                media_player.Attributes.MEDIA_ARTIST: "",
+                media_player.Attributes.MEDIA_ALBUM: "",
+                media_player.Attributes.MEDIA_IMAGE_URL: "",
+            },
+            device_class=media_player.DeviceClasses.RECEIVER,
+            cmd_handler=self._handle_command,
+        )
+
+        self.subscribe_to_device(device)
+
+    async def sync_state(self) -> None:
+        """Push this daily forecast to the Remote."""
+        if self._device.state == "UNAVAILABLE":
+            self.update(
+                {media_player.Attributes.STATE: media_player.States.UNAVAILABLE}
+            )
+            return
+
+        forecast = self._device.daily_forecast(self._days_ahead)
+        attributes: dict[str, Any] = {
+            media_player.Attributes.STATE: media_player.States.ON,
+        }
+
+        if forecast:
+            date = forecast["date"]
+            day_label = "Tomorrow" if self._days_ahead == 1 else date.strftime("%A")
+            date_label = f"{date.strftime('%a, %b')} {date.day}"
+            precipitation_label = _precipitation_label(forecast["weather_code"])
+            unit = self._temperature_unit_symbol
+
+            attributes[media_player.Attributes.MEDIA_TITLE] = (
+                f"{date_label} • {forecast['description']}"
+            )
+            attributes[media_player.Attributes.MEDIA_ARTIST] = (
+                f"H {round(float(forecast['high']))}{unit} / "
+                f"L {round(float(forecast['low']))}{unit} "
+                f"• {precipitation_label} {forecast['precipitation_probability']}%"
+            )
+            attributes[media_player.Attributes.MEDIA_ALBUM] = ""
+            attributes[media_player.Attributes.MEDIA_IMAGE_URL] = await self._artwork(
+                lambda: self._daily_scene(forecast, day_label, precipitation_label),
+                forecast["icon"],
+            )
+        else:
+            attributes[media_player.Attributes.MEDIA_TITLE] = (
+                "Tomorrow" if self._days_ahead == 1 else f"+{self._days_ahead} days"
+            )
+            attributes[media_player.Attributes.MEDIA_ARTIST] = "Forecast unavailable"
+            attributes[media_player.Attributes.MEDIA_ALBUM] = ""
+
+        self.update(attributes)
+
+    def _daily_scene(self, forecast: dict, day_label: str, precipitation_label: str) -> Any:
+        info = []
+        if forecast["sunrise"] and forecast["sunset"]:
+            info.append(f"Sunrise {_clock(forecast['sunrise'])}")
+            info.append(f"Sunset {_clock(forecast['sunset'])}")
+        if forecast["uv_index"] is not None:
+            info.append(f"UV {round(float(forecast['uv_index']))}")
+
+        return _scene.SceneSpec(
+            weather_code=forecast["weather_code"],
+            is_day=True,
+            temperature=_degrees(forecast["high"]),
+            description=forecast["description"],
+            subtitle=(
+                f"{day_label}  •  L {_degrees(forecast['low'])}  •  "
+                f"{precipitation_label} {forecast['precipitation_probability']}%"
+            ),
+            sky_position=0.5,
+            info_line="  •  ".join(info),
+            wind=_wind_strength(forecast["wind_max"], None, self._device.wind_unit_label),
+        )
+
+
+def create_weather_daily_entities(
+    device_config: WeatherConfig,
+    device: WeatherDevice,
+) -> list[WeatherDailyMediaPlayer]:
+    """Create the tomorrow through +5 days forecast entities."""
+    return [
+        WeatherDailyMediaPlayer(device_config, device, days_ahead)
+        for days_ahead in _FORECAST_DAYS
+    ]
 
 
 def create_weather_forecast_entities(

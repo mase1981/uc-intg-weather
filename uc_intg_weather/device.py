@@ -254,6 +254,66 @@ class WeatherDevice(PollingDevice):
         except (TypeError, ValueError):
             return None, False
 
+    def current_value(self, field: str) -> Any:
+        """Return a raw value from the Open-Meteo `current` block."""
+        if not self._weather_data:
+            return None
+        return self._weather_data.get("current", {}).get(field)
+
+    @property
+    def wind_unit_label(self) -> str:
+        return "mph" if self._device_config.temperature_unit == "fahrenheit" else "km/h"
+
+    def is_twilight(self, when: datetime) -> bool:
+        """True within 40 minutes after sunset or before sunrise (blue hour)."""
+        window = timedelta(minutes=40)
+        try:
+            sunrise = self._parse(self._daily_value("sunrise", when))
+            sunset = self._parse(self._daily_value("sunset", when))
+        except (TypeError, ValueError):
+            return False
+        if sunrise and timedelta(0) <= sunrise - when <= window:
+            return True
+        if sunset and timedelta(0) <= when - sunset <= window:
+            return True
+        return False
+
+    def daily_forecast(self, days_ahead: int) -> dict | None:
+        """Return the daily forecast for today + days_ahead at the location."""
+        if not self._weather_data or days_ahead < 1:
+            return None
+        day = self.location_now() + timedelta(days=days_ahead)
+
+        code = self._daily_value("weather_code", day)
+        high = self._daily_value("temperature_2m_max", day)
+        low = self._daily_value("temperature_2m_min", day)
+        if code is None or high is None or low is None:
+            return None
+
+        def value(field: str, default: Any) -> Any:
+            result = self._daily_value(field, day)
+            return default if result is None else result
+
+        try:
+            sunrise = self._parse(self._daily_value("sunrise", day))
+            sunset = self._parse(self._daily_value("sunset", day))
+        except (TypeError, ValueError):
+            sunrise = sunset = None
+
+        return {
+            "date": day.date(),
+            "weather_code": code,
+            "description": WeatherClient.WEATHER_DESCRIPTIONS.get(code, "Unknown"),
+            "icon": WeatherClient.WEATHER_ICONS_DAY.get(code, "cloud.png"),
+            "high": high,
+            "low": low,
+            "precipitation_probability": value("precipitation_probability_max", 0),
+            "uv_index": value("uv_index_max", None),
+            "wind_max": value("wind_speed_10m_max", None),
+            "sunrise": sunrise,
+            "sunset": sunset,
+        }
+
     @staticmethod
     def _parse(value: Any) -> datetime | None:
         if not value:

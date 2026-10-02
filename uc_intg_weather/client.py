@@ -123,6 +123,15 @@ class WeatherClient:
         self.ssl_context = ssl.create_default_context(cafile=certifi.where())
         self.session: aiohttp.ClientSession | None = None
 
+    @property
+    def wind_unit(self) -> str:
+        """Open-Meteo wind unit matching the chosen temperature unit."""
+        return "mph" if self.temperature_unit == "fahrenheit" else "kmh"
+
+    @property
+    def wind_unit_label(self) -> str:
+        return "mph" if self.temperature_unit == "fahrenheit" else "km/h"
+
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create HTTP session, ensuring SSL context is used."""
         if self.session is None or self.session.closed:
@@ -145,11 +154,17 @@ class WeatherClient:
             params = {
                 "latitude": self.latitude,
                 "longitude": self.longitude,
-                "current": "temperature_2m,weather_code,relative_humidity_2m,wind_speed_10m,is_day",
+                "current": (
+                    "temperature_2m,weather_code,relative_humidity_2m,wind_speed_10m,is_day,"
+                    "apparent_temperature,wind_direction_10m,wind_gusts_10m,uv_index"
+                ),
                 "hourly": "temperature_2m,weather_code,precipitation_probability,is_day",
-                "daily": "sunrise,sunset,temperature_2m_max,temperature_2m_min",
+                "daily": (
+                    "sunrise,sunset,temperature_2m_max,temperature_2m_min,"
+                    "weather_code,precipitation_probability_max,uv_index_max,wind_speed_10m_max"
+                ),
                 "temperature_unit": self.temperature_unit,
-                "wind_speed_unit": "mph",
+                "wind_speed_unit": self.wind_unit,
                 "timezone": "auto"
             }
 
@@ -176,13 +191,14 @@ class WeatherClient:
                         "description": self.WEATHER_DESCRIPTIONS.get(weather_code, "Unknown"),
                         "icon": icon,
                         "humidity": f"{current.get('relative_humidity_2m', 0)}%",
-                        "wind_speed": f"{current.get('wind_speed_10m', 0)} mph",
+                        "wind_speed": f"{current.get('wind_speed_10m', 0)} {self.wind_unit_label}",
                         "weather_code": weather_code,
                         "is_day": is_day,
                         "utc_offset_seconds": data.get("utc_offset_seconds", 0),
                         "hourly": data.get("hourly", {}),
                         "daily": data.get("daily", {}),
                         "temperature_value": current.get("temperature_2m", 0),
+                        "current": current,
                     }
                     _LOG.info(f"Weather data received: {result['temperature']} - {result['description']} ({'Day' if is_day else 'Night'})")
                     return result
