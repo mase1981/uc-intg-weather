@@ -50,10 +50,19 @@ Your support helps maintain this integration. Thank you! ❤️
 - **Wind & Twilight** - Windy weather adds wind streaks and slants the rain; a blue-hour sky appears just after sunset and before sunrise
 - **Efficient** - Redrawn only when the scene changes (480x420 JPEG sized for the Remote 3 artwork box, ~15-30 KB); falls back to the classic icons if rendering is unavailable
 
-#### **Daily Forecast Tiles**
-- **5-Day Outlook** - "Weather Tomorrow" through "Weather +5 days" entities
-- **Per Day** - Conditions scene, high/low, rain chance, sunrise/sunset and UV index
-- **Optional** - Add only the tiles you want; existing entities are unchanged
+#### **Forecast Cards (recommended)**
+- **Weather Hourly Forecast** - The next 6 hours on one card: icon, temperature and rain chance per hour
+- **Weather 5-Day Forecast** - The next 5 days on one card: icon, high/low and rain chance per day
+- **Step Through** - Next/Previous highlights an hour or day and shows its details
+
+#### **Single-Slot Forecast Tiles**
+- **Hourly & Daily** - "Weather +1 hour" through "+6 hours" and "Weather Tomorrow" through "+5 days"
+- **Text Only** - These tiles show text without artwork
+
+> **Why text only?** The Remote keeps artwork for at most 12 media players at once and blanks the
+> oldest when there are more. To keep every tile displaying, this integration sends artwork for at
+> most 3 media players per location (main tile, hourly card, 5-day card). Use the forecast cards for
+> pictures and the single-slot tiles for compact text.
 
 #### **Weather Sensors**
 - **Current Conditions** - Temperature, feels like, humidity, conditions, wind speed, gusts and direction, UV index, rain chance, sunrise and sunset

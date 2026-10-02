@@ -14,6 +14,7 @@ from uc_intg_weather.device import WeatherDevice
 from uc_intg_weather.media_player import (
     WeatherMediaPlayer,
     create_weather_daily_entities,
+    create_weather_forecast_cards,
     create_weather_forecast_entities,
 )
 from uc_intg_weather.select import create_weather_unit_selects
@@ -30,6 +31,7 @@ class WeatherDriver(BaseIntegrationDriver[WeatherDevice, WeatherConfig]):
             device_class=WeatherDevice,
             entity_classes=[
                 WeatherMediaPlayer,
+                create_weather_forecast_cards,
                 create_weather_forecast_entities,
                 create_weather_daily_entities,
                 create_weather_sensors,

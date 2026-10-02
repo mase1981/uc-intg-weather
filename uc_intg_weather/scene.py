@@ -396,3 +396,144 @@ def render(spec: SceneSpec) -> bytes:
     out = io.BytesIO()
     img.convert("RGB").save(out, format="JPEG", quality=JPEG_QUALITY, optimize=True)
     return out.getvalue()
+
+
+# ----------------------------------------------------------------------
+# Forecast overview cards (several slots on one image)
+# ----------------------------------------------------------------------
+# The Remote UI keeps decoded artwork for at most 12 media players
+# (remote-ui src/ui/mediaImageProvider.h, m_maxEntries = 12) and evicts the
+# least recently updated one, leaving that tile blank. One card per forecast
+# range instead of one image per slot keeps the weather footprint small.
+_ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons")
+_icon_cache: dict[tuple[str, int], Image.Image] = {}
+
+
+@dataclass(frozen=True)
+class ForecastSlot:
+    """One column of a forecast card."""
+
+    label: str  # "6 PM" / "Sat"
+    icon: str  # icon file name from the icons folder
+    primary: str  # "18°", or the high for a day
+    precipitation: int  # chance in percent
+    secondary: str = ""  # the low for a day, drawn under the primary value
+
+
+@dataclass(frozen=True)
+class ForecastCardSpec:
+    """A row of forecast slots drawn over the current sky."""
+
+    title: str
+    subtitle: str
+    slots: tuple[ForecastSlot, ...]
+    selected: int = 0
+    weather_code: int = 0  # sky background follows the current conditions
+    is_day: bool = True
+    golden: bool = False
+    twilight: bool = False
+
+
+def _icon(name: str, size: int) -> Image.Image | None:
+    key = (name, size)
+    if key not in _icon_cache:
+        path = os.path.join(_ICON_DIR, name)
+        if not os.path.exists(path):
+            path = os.path.join(_ICON_DIR, "cloud.png")
+        try:
+            with Image.open(path) as src:
+                _icon_cache[key] = src.convert("RGBA").resize((size, size), Image.LANCZOS)
+        except OSError:
+            return None
+    return _icon_cache[key]
+
+
+def render_forecast_card(spec: ForecastCardSpec) -> bytes:
+    """Render a forecast overview card and return JPEG bytes."""
+    background = SceneSpec(
+        weather_code=spec.weather_code,
+        is_day=spec.is_day,
+        temperature="",
+        description="",
+        subtitle="",
+        golden=spec.golden,
+        twilight=spec.twilight,
+    )
+    img = _sky(background, condition_for_code(spec.weather_code))
+
+    # Darken for contrast so every slot stays readable on any sky.
+    shade = Image.new("RGBA", img.size, (0, 0, 0, 110))
+    img.alpha_composite(shade)
+
+    draw = ImageDraw.Draw(img)
+    text_width = WIDTH - 2 * SAFE_X
+    draw.text((SAFE_X, 28), _fit(spec.title, _FONT_BOLD, 26, text_width), font=_font(_FONT_BOLD, 26), fill="white")
+    draw.text(
+        (SAFE_X, 62), _fit(spec.subtitle, _FONT_REGULAR, 16, text_width),
+        font=_font(_FONT_REGULAR, 16), fill=(214, 220, 232),
+    )
+
+    count = max(1, len(spec.slots))
+    column = text_width / count
+    top, bottom = 108, 392
+    icon_size = int(min(64, column - 10))
+
+    for index, slot in enumerate(spec.slots):
+        x0 = SAFE_X + index * column
+        center = x0 + column / 2
+
+        if index == spec.selected:
+            panel = Image.new("RGBA", img.size, (255, 255, 255, 0))
+            ImageDraw.Draw(panel).rounded_rectangle(
+                [x0 + 3, top, x0 + column - 3, bottom], radius=14, fill=(255, 255, 255, 46),
+                outline=(255, 255, 255, 150), width=2,
+            )
+            img.alpha_composite(panel)
+            draw = ImageDraw.Draw(img)
+
+        label_font = _font(_FONT_BOLD, 17)
+        label = _fit(slot.label, _FONT_BOLD, 17, int(column - 6))
+        draw.text((center - label_font.getlength(label) / 2, top + 14), label, font=label_font, fill="white")
+
+        icon = _icon(slot.icon, icon_size)
+        if icon is not None:
+            img.alpha_composite(icon, (int(center - icon_size / 2), top + 50))
+            draw = ImageDraw.Draw(img)
+
+        # Shrink rather than truncate so every value stays complete.
+        primary_size = 22
+        while primary_size > 12 and _font(_FONT_BOLD, primary_size).getlength(slot.primary) > column - 6:
+            primary_size -= 1
+        primary_font = _font(_FONT_BOLD, primary_size)
+        primary_y = top + (122 if slot.secondary else 132)
+        draw.text(
+            (center - primary_font.getlength(slot.primary) / 2, primary_y), slot.primary,
+            font=primary_font, fill="white",
+        )
+        if slot.secondary:
+            secondary_font = _font(_FONT_REGULAR, 17)
+            draw.text(
+                (center - secondary_font.getlength(slot.secondary) / 2, primary_y + 28), slot.secondary,
+                font=secondary_font, fill=(196, 206, 222),
+            )
+
+        # Rain chance: small bar plus percentage.
+        bar_top, bar_bottom = top + 180, top + 240
+        bar_height = max(2.0, (bar_bottom - bar_top) * max(0, min(100, slot.precipitation)) / 100)
+        bars = Image.new("RGBA", img.size, (255, 255, 255, 0))
+        bars_draw = ImageDraw.Draw(bars)
+        bars_draw.rounded_rectangle(
+            [center - 7, bar_top, center + 7, bar_bottom], radius=4, fill=(255, 255, 255, 45)
+        )
+        bars_draw.rounded_rectangle(
+            [center - 7, bar_bottom - bar_height, center + 7, bar_bottom], radius=4, fill=(120, 180, 255, 235)
+        )
+        img.alpha_composite(bars)
+        draw = ImageDraw.Draw(img)
+        pop_font = _font(_FONT_REGULAR, 14)
+        pop = f"{slot.precipitation}%"
+        draw.text((center - pop_font.getlength(pop) / 2, bar_bottom + 8), pop, font=pop_font, fill=(196, 214, 240))
+
+    out = io.BytesIO()
+    img.convert("RGB").save(out, format="JPEG", quality=JPEG_QUALITY, optimize=True)
+    return out.getvalue()
