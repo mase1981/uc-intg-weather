@@ -12,7 +12,7 @@ from ucapi import RequestUserInput, SetupError
 from ucapi_framework import BaseSetupFlow
 
 from uc_intg_weather.client import WeatherClient
-from uc_intg_weather.config import WIND_UNITS, WeatherConfig, build_identifier
+from uc_intg_weather.config import TEXT_SIZES, WIND_UNITS, WeatherConfig, build_identifier
 
 _LOG = logging.getLogger(__name__)
 
@@ -77,6 +77,20 @@ class WeatherSetupFlow(BaseSetupFlow[WeatherConfig]):
                         }
                     },
                 },
+                {
+                    "id": "text_size",
+                    "label": {"en": "Artwork text size"},
+                    "field": {
+                        "dropdown": {
+                            "value": "normal",
+                            "items": [
+                                {"id": "normal", "label": {"en": "Normal (most detail)"}},
+                                {"id": "large", "label": {"en": "Large (4 hours / 4 days per card)"}},
+                                {"id": "xlarge", "label": {"en": "Extra Large (3 hours / 3 days per card)"}},
+                            ],
+                        }
+                    },
+                },
             ]
         )
         return RequestUserInput({"en": "Weather Location"}, settings)
@@ -95,6 +109,9 @@ class WeatherSetupFlow(BaseSetupFlow[WeatherConfig]):
         wind_unit = str(input_values.get("wind_unit", "")).strip()
         if wind_unit not in WIND_UNITS:
             wind_unit = ""
+        text_size = str(input_values.get("text_size", "")).strip()
+        if text_size not in TEXT_SIZES:
+            text_size = "normal"
 
         # Priority 1: explicit coordinates
         if lat_str and lon_str:
@@ -116,7 +133,7 @@ class WeatherSetupFlow(BaseSetupFlow[WeatherConfig]):
 
             location_name = display_name or f"Location ({latitude}, {longitude})"
             return self._make_config(
-                latitude, longitude, location_name, temperature_unit, wind_unit
+                latitude, longitude, location_name, temperature_unit, wind_unit, text_size
             )
 
         # Priority 2: location string -> geocode
@@ -137,7 +154,7 @@ class WeatherSetupFlow(BaseSetupFlow[WeatherConfig]):
             if display_name:
                 location_name = display_name
             return self._make_config(
-                latitude, longitude, location_name, temperature_unit, wind_unit
+                latitude, longitude, location_name, temperature_unit, wind_unit, text_size
             )
 
         return self._build_form(
@@ -157,7 +174,12 @@ class WeatherSetupFlow(BaseSetupFlow[WeatherConfig]):
 
     @staticmethod
     def _make_config(
-        latitude: float, longitude: float, location_name: str, unit: str, wind_unit: str = ""
+        latitude: float,
+        longitude: float,
+        location_name: str,
+        unit: str,
+        wind_unit: str = "",
+        text_size: str = "normal",
     ) -> WeatherConfig:
         identifier = build_identifier(latitude, longitude)
         return WeatherConfig(
@@ -168,4 +190,5 @@ class WeatherSetupFlow(BaseSetupFlow[WeatherConfig]):
             location_name=location_name,
             temperature_unit=unit,
             wind_unit=wind_unit,
+            text_size=text_size,
         )

@@ -21,6 +21,7 @@ from ucapi_framework import PollingDevice
 from uc_intg_weather.client import WeatherClient
 from uc_intg_weather.config import (
     TEMPERATURE_UNITS,
+    TEXT_SIZES,
     WIND_UNITS,
     WeatherConfig,
     resolve_wind_unit,
@@ -306,6 +307,20 @@ class WeatherDevice(PollingDevice):
             self._client.wind_unit_setting = self._device_config.wind_unit
         _LOG.info("[%s] Units changed: %s", self.log_id, changes)
         await self.refresh_weather()
+
+    @property
+    def text_size(self) -> str:
+        """Artwork text size ("normal", "large" or "xlarge")."""
+        size = getattr(self._device_config, "text_size", "normal")
+        return size if size in TEXT_SIZES else "normal"
+
+    async def set_text_size(self, text_size: str) -> None:
+        """Change the artwork text size, persist it and redraw the artwork."""
+        if text_size not in TEXT_SIZES or text_size == self.text_size:
+            return
+        self.update_config(text_size=text_size)
+        _LOG.info("[%s] Text size changed: %s", self.log_id, text_size)
+        self.push_update()
 
     def is_twilight(self, when: datetime) -> bool:
         """True within 40 minutes after sunset or before sunrise (blue hour)."""

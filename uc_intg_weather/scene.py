@@ -42,6 +42,16 @@ _SYNODIC_MONTH = 29.530588853
 
 _font_cache: dict[tuple[str, int], ImageFont.FreeTypeFont] = {}
 
+# Text size steps. "normal" keeps the original layout; larger steps enlarge the
+# text and drop lower-priority detail so everything stays readable in the box.
+TEXT_NORMAL = "normal"
+TEXT_LARGE = "large"
+TEXT_XLARGE = "xlarge"
+TEXT_SIZES = (TEXT_NORMAL, TEXT_LARGE, TEXT_XLARGE)
+
+# Forecast card slots shown per text size: (hourly, daily).
+CARD_SLOTS = {TEXT_NORMAL: (6, 5), TEXT_LARGE: (4, 4), TEXT_XLARGE: (3, 3)}
+
 
 def _font(path: str, size: int) -> ImageFont.FreeTypeFont:
     key = (path, size)
@@ -128,6 +138,7 @@ class SceneSpec:
     info_line: str = ""  # small extra line, e.g. feels like / wind / UV
     wind: float = 0.0  # 0 = calm, 1 = very windy (streaks and slanted rain)
     twilight: bool = False  # blue hour just after sunset / before sunrise
+    text_size: str = TEXT_NORMAL
 
 
 # ----------------------------------------------------------------------
@@ -302,6 +313,10 @@ def _lightning(img: Image.Image, rnd: random.Random) -> None:
 
 
 def _text(img: Image.Image, spec: SceneSpec) -> None:
+    if spec.text_size != TEXT_NORMAL:
+        _text_large(img, spec)
+        return
+
     shade = Image.new("RGBA", img.size, (0, 0, 0, 0))
     shade_draw = ImageDraw.Draw(shade)
     for y in range(215, HEIGHT):
@@ -325,6 +340,62 @@ def _text(img: Image.Image, spec: SceneSpec) -> None:
         )
 
 
+# Large text: (temperature, description, subtitle) font sizes; laid out bottom-up.
+_LARGE_TEXT = {TEXT_LARGE: (104, 31, 21), TEXT_XLARGE: (126, 36, 24)}
+_BOTTOM_MARGIN = 16
+
+
+def _text_height(font: ImageFont.FreeTypeFont, text: str = "Hg°") -> tuple[int, int]:
+    """Return (top offset, height) of the drawn glyphs for vertical layout."""
+    left, top, right, bottom = font.getbbox(text)
+    return top, bottom - top
+
+
+def _text_large(img: Image.Image, spec: SceneSpec) -> None:
+    """Large / extra large layout: stack subtitle, description, temperature upwards."""
+    temp_size, desc_size, sub_size = _LARGE_TEXT[spec.text_size]
+    text_width = WIDTH - 2 * SAFE_X
+    temp_font = _font(_FONT_BOLD, temp_size)
+    desc_font = _font(_FONT_BOLD, desc_size)
+    sub_font = _font(_FONT_REGULAR, sub_size)
+
+    sub_top, sub_h = _text_height(sub_font)
+    desc_top, desc_h = _text_height(desc_font)
+    temp_top, temp_h = _text_height(temp_font, spec.temperature or "0°")
+
+    sub_y = HEIGHT - _BOTTOM_MARGIN - sub_h
+    desc_y = sub_y - 10 - desc_h
+    temp_y = desc_y - 14 - temp_h
+
+    shade_start = max(0, temp_y - 30)
+    shade = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    shade_draw = ImageDraw.Draw(shade)
+    for y in range(shade_start, HEIGHT):
+        shade_draw.line(
+            [(0, y), (WIDTH, y)], fill=(0, 0, 0, int(190 * (y - shade_start) / (HEIGHT - shade_start)))
+        )
+    img.alpha_composite(shade)
+
+    draw = ImageDraw.Draw(img)
+    draw.text((SAFE_X - 3, temp_y - temp_top), spec.temperature, font=temp_font, fill="white")
+    draw.text(
+        (SAFE_X, desc_y - desc_top), _fit(spec.description, _FONT_BOLD, desc_size, text_width),
+        font=desc_font, fill="white",
+    )
+    draw.text(
+        (SAFE_X, sub_y - sub_top), _fit(spec.subtitle, _FONT_REGULAR, sub_size, text_width),
+        font=sub_font, fill=(226, 230, 240),
+    )
+
+    # The 6-hour strip only stays if it fits beside the temperature.
+    if spec.text_size == TEXT_LARGE and len(spec.strip_temps) >= 2:
+        temp_right = SAFE_X + temp_font.getlength(spec.temperature)
+        x1 = WIDTH - SAFE_X - 4
+        x0 = max(x1 - 150, temp_right + 24)
+        if x1 - x0 >= 110:
+            _draw_strip(img, spec, x0, x1, temp_y, desc_y - 12)
+
+
 def _fit(text: str, font_path: str, size: int, max_width: int) -> str:
     font = _font(font_path, size)
     if font.getlength(text) <= max_width:
@@ -334,7 +405,34 @@ def _fit(text: str, font_path: str, size: int, max_width: int) -> str:
     return text.rstrip() + "…"
 
 
+def _draw_strip(img: Image.Image, spec: SceneSpec, x0: float, x1: float, top: float, bottom: float) -> None:
+    """Strip for the large layout, fitted into the given box."""
+    temps, pops = spec.strip_temps, spec.strip_pops
+    draw = ImageDraw.Draw(img)
+    label_font = _font(_FONT_REGULAR, 15)
+    line_top = top + 22
+    bar_bottom = bottom
+    line_h = max(20.0, (bar_bottom - line_top) * 0.45)
+    lo, hi = min(temps), max(temps)
+    step = (x1 - x0) / (len(temps) - 1)
+    points = [
+        (x0 + i * step, line_top + line_h - (t - lo) / max(1.0, hi - lo) * line_h) for i, t in enumerate(temps)
+    ]
+    bar_max = max(10.0, bar_bottom - (line_top + line_h) - 10)
+    for i, pop in enumerate(pops[: len(temps)]):
+        height = max(2.0, pop / 100 * bar_max)
+        x = x0 + i * step
+        draw.rectangle([x - 6, bar_bottom - height, x + 6, bar_bottom], fill=(120, 180, 255, 210))
+    draw.line(points, fill=(255, 210, 120), width=4, joint="curve")
+    for px, py in points:
+        draw.ellipse([px - 4.5, py - 4.5, px + 4.5, py + 4.5], fill="white")
+    if spec.strip_label:
+        draw.text((x1 - label_font.getlength(spec.strip_label), top), spec.strip_label, font=label_font, fill=(215, 220, 230))
+
+
 def _strip(img: Image.Image, spec: SceneSpec) -> None:
+    if spec.text_size != TEXT_NORMAL:
+        return  # drawn by _text_large when it fits
     temps, pops = spec.strip_temps, spec.strip_pops
     if len(temps) < 2:
         return
@@ -432,6 +530,15 @@ class ForecastCardSpec:
     is_day: bool = True
     golden: bool = False
     twilight: bool = False
+    text_size: str = TEXT_NORMAL
+
+
+# Card font sizes: title, subtitle, slot label, icon, primary, secondary, rain %.
+_CARD_SIZES = {
+    TEXT_NORMAL: (26, 16, 17, 64, 22, 17, 14),
+    TEXT_LARGE: (30, 19, 23, 78, 31, 23, 18),
+    TEXT_XLARGE: (34, 21, 27, 92, 38, 27, 21),
+}
 
 
 def _icon(name: str, size: int) -> Image.Image | None:
@@ -465,18 +572,51 @@ def render_forecast_card(spec: ForecastCardSpec) -> bytes:
     shade = Image.new("RGBA", img.size, (0, 0, 0, 110))
     img.alpha_composite(shade)
 
+    title_size, subtitle_size, label_size, icon_max, primary_max, secondary_size, pop_size = _CARD_SIZES.get(
+        spec.text_size, _CARD_SIZES[TEXT_NORMAL]
+    )
     draw = ImageDraw.Draw(img)
     text_width = WIDTH - 2 * SAFE_X
-    draw.text((SAFE_X, 28), _fit(spec.title, _FONT_BOLD, 26, text_width), font=_font(_FONT_BOLD, 26), fill="white")
+    title_font = _font(_FONT_BOLD, title_size)
+    subtitle_font = _font(_FONT_REGULAR, subtitle_size)
+    title_y = 28
+    subtitle_y = 62 if spec.text_size == TEXT_NORMAL else title_y + _text_height(title_font)[1] + 10
+    draw.text((SAFE_X, title_y), _fit(spec.title, _FONT_BOLD, title_size, text_width), font=title_font, fill="white")
     draw.text(
-        (SAFE_X, 62), _fit(spec.subtitle, _FONT_REGULAR, 16, text_width),
-        font=_font(_FONT_REGULAR, 16), fill=(214, 220, 232),
+        (SAFE_X, subtitle_y), _fit(spec.subtitle, _FONT_REGULAR, subtitle_size, text_width),
+        font=subtitle_font, fill=(214, 220, 232),
     )
 
     count = max(1, len(spec.slots))
     column = text_width / count
-    top, bottom = 108, 392
-    icon_size = int(min(64, column - 10))
+    top = max(108, subtitle_y + _text_height(subtitle_font)[1] + 24)
+    bottom = 392
+    icon_size = int(min(icon_max, column - 10))
+    label_font = _font(_FONT_BOLD, label_size)
+    secondary_font = _font(_FONT_REGULAR, secondary_size)
+    pop_font = _font(_FONT_REGULAR, pop_size)
+    has_secondary = any(slot.secondary for slot in spec.slots)
+
+    # Vertical layout from the top of the slot down; the rain bar takes what is left.
+    label_y = top + 14
+    icon_y = label_y + _text_height(label_font)[1] + 14
+    primary_y = icon_y + icon_size + (6 if has_secondary else 14)
+    primary_h = _text_height(_font(_FONT_BOLD, primary_max))[1]
+    secondary_y = primary_y + primary_h + 8
+    values_bottom = secondary_y + (_text_height(secondary_font)[1] if has_secondary else -8)
+    pop_h = _text_height(pop_font, "0%")[1]
+    bar_top = values_bottom + 16
+    bar_bottom = bottom - pop_h - 22
+    bar_half = 9
+    pop_y = bottom - pop_h - 14
+    if spec.text_size == TEXT_NORMAL:
+        # Keep the original 3.5.0 layout exactly.
+        icon_y = top + 50
+        primary_y = top + (122 if has_secondary else 132)
+        secondary_y = primary_y + 28
+        bar_top, bar_bottom = top + 180, top + 240
+        bar_half = 7
+        pop_y = bar_bottom + 8
 
     for index, slot in enumerate(spec.slots):
         x0 = SAFE_X + index * column
@@ -491,48 +631,46 @@ def render_forecast_card(spec: ForecastCardSpec) -> bytes:
             img.alpha_composite(panel)
             draw = ImageDraw.Draw(img)
 
-        label_font = _font(_FONT_BOLD, 17)
-        label = _fit(slot.label, _FONT_BOLD, 17, int(column - 6))
-        draw.text((center - label_font.getlength(label) / 2, top + 14), label, font=label_font, fill="white")
+        label = _fit(slot.label, _FONT_BOLD, label_size, int(column - 6))
+        draw.text((center - label_font.getlength(label) / 2, label_y), label, font=label_font, fill="white")
 
         icon = _icon(slot.icon, icon_size)
         if icon is not None:
-            img.alpha_composite(icon, (int(center - icon_size / 2), top + 50))
+            img.alpha_composite(icon, (int(center - icon_size / 2), int(icon_y)))
             draw = ImageDraw.Draw(img)
 
         # Shrink rather than truncate so every value stays complete.
-        primary_size = 22
+        primary_size = primary_max
         while primary_size > 12 and _font(_FONT_BOLD, primary_size).getlength(slot.primary) > column - 6:
             primary_size -= 1
         primary_font = _font(_FONT_BOLD, primary_size)
-        primary_y = top + (122 if slot.secondary else 132)
+        shrink = 0 if spec.text_size == TEXT_NORMAL else (primary_max - primary_size) // 2
         draw.text(
-            (center - primary_font.getlength(slot.primary) / 2, primary_y), slot.primary,
-            font=primary_font, fill="white",
+            (center - primary_font.getlength(slot.primary) / 2, primary_y + shrink),
+            slot.primary, font=primary_font, fill="white",
         )
         if slot.secondary:
-            secondary_font = _font(_FONT_REGULAR, 17)
             draw.text(
-                (center - secondary_font.getlength(slot.secondary) / 2, primary_y + 28), slot.secondary,
+                (center - secondary_font.getlength(slot.secondary) / 2, secondary_y), slot.secondary,
                 font=secondary_font, fill=(196, 206, 222),
             )
 
         # Rain chance: small bar plus percentage.
-        bar_top, bar_bottom = top + 180, top + 240
-        bar_height = max(2.0, (bar_bottom - bar_top) * max(0, min(100, slot.precipitation)) / 100)
-        bars = Image.new("RGBA", img.size, (255, 255, 255, 0))
-        bars_draw = ImageDraw.Draw(bars)
-        bars_draw.rounded_rectangle(
-            [center - 7, bar_top, center + 7, bar_bottom], radius=4, fill=(255, 255, 255, 45)
-        )
-        bars_draw.rounded_rectangle(
-            [center - 7, bar_bottom - bar_height, center + 7, bar_bottom], radius=4, fill=(120, 180, 255, 235)
-        )
-        img.alpha_composite(bars)
-        draw = ImageDraw.Draw(img)
-        pop_font = _font(_FONT_REGULAR, 14)
+        if bar_bottom - bar_top >= 36:
+            bar_height = max(2.0, (bar_bottom - bar_top) * max(0, min(100, slot.precipitation)) / 100)
+            bars = Image.new("RGBA", img.size, (255, 255, 255, 0))
+            bars_draw = ImageDraw.Draw(bars)
+            bars_draw.rounded_rectangle(
+                [center - bar_half, bar_top, center + bar_half, bar_bottom], radius=4, fill=(255, 255, 255, 45)
+            )
+            bars_draw.rounded_rectangle(
+                [center - bar_half, bar_bottom - bar_height, center + bar_half, bar_bottom], radius=4,
+                fill=(120, 180, 255, 235),
+            )
+            img.alpha_composite(bars)
+            draw = ImageDraw.Draw(img)
         pop = f"{slot.precipitation}%"
-        draw.text((center - pop_font.getlength(pop) / 2, bar_bottom + 8), pop, font=pop_font, fill=(196, 214, 240))
+        draw.text((center - pop_font.getlength(pop) / 2, pop_y), pop, font=pop_font, fill=(196, 214, 240))
 
     out = io.BytesIO()
     img.convert("RGB").save(out, format="JPEG", quality=JPEG_QUALITY, optimize=True)

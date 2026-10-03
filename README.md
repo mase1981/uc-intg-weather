@@ -55,6 +55,12 @@ Your support helps maintain this integration. Thank you! ❤️
 - **Weather 5-Day Forecast** - The next 5 days on one card: icon, high/low and rain chance per day
 - **Step Through** - Next/Previous highlights an hour or day and shows its details
 
+#### **Text Size**
+- **Normal** - Most detail: 6 hours / 5 days per card, feels like / wind / UV line on the main tile
+- **Large** - Bigger text: 4 hours / 4 days per card
+- **Extra Large** - Biggest text: 3 hours / 3 days per card, temperature and conditions only on the main tile
+- **Choose Anytime** - Pick it during setup or change it from the Remote with the Text Size select
+
 #### **Single-Slot Forecast Tiles**
 - **Hourly & Daily** - "Weather +1 hour" through "+6 hours" and "Weather Tomorrow" through "+5 days"
 - **Text Only** - These tiles show text without artwork
@@ -68,9 +74,10 @@ Your support helps maintain this integration. Thank you! ❤️
 - **Current Conditions** - Temperature, feels like, humidity, conditions, wind speed, gusts and direction, UV index, rain chance, sunrise and sunset
 - **Use Anywhere** - Place them on Remote pages or use them in activities
 
-#### **Unit Selects**
+#### **Display Selects**
 - **Temperature Unit** - Switch between °C and °F from the Remote
 - **Wind Unit** - Switch between mph, km/h, m/s and knots from the Remote
+- **Text Size** - Switch the artwork between Normal, Large and Extra Large from the Remote
 - **Saved** - The choice is stored and applied to every tile and sensor immediately
 
 #### **Real-Time Weather Information**
@@ -211,10 +218,12 @@ For precise location control, you can enter coordinates directly:
 - No ambiguity in location lookup
 - Ideal for locations with non-standard names
 
-### Step 3: Choose Temperature Unit
+### Step 3: Choose Units and Text Size
 
 - **Fahrenheit (°F)** - Default, US standard
 - **Celsius (°C)** - Metric, international standard
+- **Wind Speed Unit** - Automatic, mph, km/h, m/s or knots
+- **Artwork Text Size** - Normal (default), Large or Extra Large
 
 ### Step 4: Complete Setup
 

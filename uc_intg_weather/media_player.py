@@ -235,6 +235,7 @@ class WeatherMediaPlayer(MediaPlayerEntity):
                 wind_speed, dev.current_value("wind_gusts_10m"), dev.wind_unit_label
             ),
             twilight=not is_day and dev.is_twilight(now),
+            text_size=dev.text_size,
         )
 
     async def _artwork(
@@ -569,7 +570,12 @@ class WeatherForecastCard(WeatherMediaPlayer):
             slots = [self._device.hourly_forecast(h) for h in _FORECAST_HOURS]
         else:
             slots = [self._device.daily_forecast(d) for d in _FORECAST_DAYS]
-        return [slot for slot in slots if slot]
+        slots = [slot for slot in slots if slot]
+        if _scene is not None:
+            # Larger text fits fewer columns on the card.
+            hourly, daily = _scene.CARD_SLOTS.get(self._device.text_size, (len(slots), len(slots)))
+            slots = slots[: hourly if self._kind == "hourly" else daily]
+        return slots
 
     def _slot_text(self, slot: dict) -> tuple[str, str]:
         label = _precipitation_label(slot["weather_code"])
@@ -631,6 +637,7 @@ class WeatherForecastCard(WeatherMediaPlayer):
             is_day=is_day,
             golden=golden,
             twilight=not is_day and dev.is_twilight(now),
+            text_size=dev.text_size,
         )
 
     async def sync_state(self) -> None:

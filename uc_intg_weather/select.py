@@ -1,9 +1,9 @@
 """
-Weather unit select entities for Unfolded Circle Remote.
+Weather select entities for Unfolded Circle Remote.
 
-Lets users switch the temperature and wind speed units straight from the
-Remote. The choice is saved to the configuration and the weather is refreshed
-immediately.
+Lets users switch the temperature and wind speed units and the artwork text
+size straight from the Remote. The choice is saved to the configuration and
+the display is refreshed immediately.
 
 :copyright: (c) 2025 by Meir Miyara.
 :license: MPL-2.0, see LICENSE for more details.
@@ -18,7 +18,7 @@ from ucapi import StatusCodes
 from ucapi.select import Attributes, Commands, States
 from ucapi_framework import SelectEntity
 
-from uc_intg_weather.config import WeatherConfig
+from uc_intg_weather.config import TEXT_SIZES, WeatherConfig
 from uc_intg_weather.device import WeatherDevice
 
 _LOG = logging.getLogger(__name__)
@@ -31,10 +31,12 @@ _WIND_OPTIONS = {
     "Metres per second (m/s)": "ms",
     "Knots (kn)": "kn",
 }
+_TEXT_SIZE_OPTIONS = {label: value for value, label in TEXT_SIZES.items()}
+_LABELS = {"temperature": "Temperature Unit", "wind": "Wind Unit", "text_size": "Text Size"}
 
 
 class WeatherUnitSelect(SelectEntity):
-    """Select entity for one display unit (temperature or wind)."""
+    """Select entity for one display setting (temperature unit, wind unit or text size)."""
 
     def __init__(
         self,
@@ -44,12 +46,16 @@ class WeatherUnitSelect(SelectEntity):
     ) -> None:
         self._device = device
         self._kind = kind
-        self._options = _TEMPERATURE_OPTIONS if kind == "temperature" else _WIND_OPTIONS
-        label = "Temperature Unit" if kind == "temperature" else "Wind Unit"
+        self._options = {
+            "temperature": _TEMPERATURE_OPTIONS,
+            "wind": _WIND_OPTIONS,
+            "text_size": _TEXT_SIZE_OPTIONS,
+        }[kind]
+        suffix = kind if kind == "text_size" else f"{kind}_unit"
 
         super().__init__(
-            f"select.{device_config.identifier}.{kind}_unit",
-            f"Weather {label}",
+            f"select.{device_config.identifier}.{suffix}",
+            f"Weather {_LABELS[kind]}",
             {
                 Attributes.STATE: States.UNKNOWN,
                 Attributes.OPTIONS: [],
@@ -62,6 +68,8 @@ class WeatherUnitSelect(SelectEntity):
     def _current_value(self) -> str:
         if self._kind == "temperature":
             return self._device.temperature_unit
+        if self._kind == "text_size":
+            return self._device.text_size
         return self._device.wind_unit
 
     def _current_option(self) -> str:
@@ -103,6 +111,8 @@ class WeatherUnitSelect(SelectEntity):
         try:
             if self._kind == "temperature":
                 await self._device.set_units(temperature_unit=value)
+            elif self._kind == "text_size":
+                await self._device.set_text_size(value)
             else:
                 await self._device.set_units(wind_unit=value)
         except Exception as err:  # pylint: disable=broad-exception-caught
@@ -116,8 +126,9 @@ class WeatherUnitSelect(SelectEntity):
 def create_weather_unit_selects(
     device_config: WeatherConfig, device: WeatherDevice
 ) -> list[WeatherUnitSelect]:
-    """Create the temperature and wind unit selects for one location."""
+    """Create the temperature unit, wind unit and text size selects for one location."""
     return [
         WeatherUnitSelect(device_config, device, "temperature"),
         WeatherUnitSelect(device_config, device, "wind"),
+        WeatherUnitSelect(device_config, device, "text_size"),
     ]

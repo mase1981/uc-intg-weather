@@ -30,10 +30,13 @@ class WeatherConfig:
     # "mph", "kmh", "ms" or "kn". Empty (configs before 3.4.0) keeps the 3.3.0
     # behaviour: mph with Fahrenheit, km/h with Celsius.
     wind_unit: str = ""
+    # Artwork text size: "normal", "large" or "xlarge" (see TEXT_SIZES).
+    text_size: str = "normal"
 
 
 WIND_UNITS = {"mph": "mph", "kmh": "km/h", "ms": "m/s", "kn": "kn"}
 TEMPERATURE_UNITS = {"celsius": "°C", "fahrenheit": "°F"}
+TEXT_SIZES = {"normal": "Normal", "large": "Large", "xlarge": "Extra Large"}
 
 
 def resolve_wind_unit(temperature_unit: str, wind_unit: str) -> str:
